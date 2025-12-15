@@ -352,7 +352,7 @@ export default function PriceUpdate() {
                         loading={isLoading ? "true" : undefined}
                         paddingBlock="large"
                     >
-                        Import Prices
+                        Update Product Prices
                     </s-button>
                 </s-section>
             </s-box>
@@ -373,7 +373,7 @@ export default function PriceUpdate() {
                     <div style={{ width: '100%' }}>
                         <ProgressBar progress={Math.floor(progress)} size="small" />
                     </div>
-                    <s-text variant="bodyLg">Updating prices...</s-text>
+                    <s-text variant="bodyLg">Updating product prices...</s-text>
                     <s-div className="ProcessMain">
                         <s-text className="ProcessInner"></s-text>
                     </s-div>
