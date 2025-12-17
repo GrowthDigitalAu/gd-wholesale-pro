@@ -32,14 +32,3 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
-
-model PriceAdjustment {
-  id          Int      @id @default(autoincrement())
-  shop        String
-  variantId   String
-  adjustment  Float
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([shop, variantId])
-}

@@ -1,0 +1,22 @@
+query RunInput {
+  cart {
+    lines {
+      id
+      quantity
+      cost {
+        amountPerQuantity {
+          amount
+          currencyCode
+        }
+      }
+      merchandise {
+        ... on ProductVariant {
+          id
+          metafield(namespace: "app", key: "original_price") {
+            value
+          }
+        }
+      }
+    }
+  }
+}

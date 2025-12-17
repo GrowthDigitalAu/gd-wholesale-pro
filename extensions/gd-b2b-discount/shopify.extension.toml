@@ -1,0 +1,21 @@
+api_version = "2025-01"
+
+[[extensions]]
+name = "t:name"
+handle = "gd-b2b-discount"
+type = "function"
+uid = "3faceaa6-a399-7507-bb81-47b2a1629238304e42a1"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "purchase.product-discount.run"
+  input_query = "src/run.graphql"
+  export = "run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
+
+  [extensions.ui.paths]
+  create = "/"
+  details = "/"

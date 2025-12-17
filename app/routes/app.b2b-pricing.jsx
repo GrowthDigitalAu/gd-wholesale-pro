@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Pagination } from "@shopify/polaris";
-import prisma from "../db.server";
+import { Pagination, Banner } from "@shopify/polaris";
+
 
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
@@ -57,6 +57,9 @@ export const loader = async ({ request }) => {
                                     sku
                                     price
                                     displayName
+                                    metafield(namespace: "app", key: "original_price") {
+                                        value
+                                    }
                                 }
                             }
                         }
@@ -78,16 +81,16 @@ export const loader = async ({ request }) => {
     const pageInfo = responseJson.data?.products?.pageInfo || {};
     const totalCount = responseJson.data?.productsCount?.count || 0;
 
-    // Fetch saved price adjustments for the shop
-    const adjustments = await prisma.priceAdjustment.findMany({
-        where: { shop: session.shop },
+    // Build initialAdjustments from Metafields of fetched products
+    const initialAdjustments = {};
+    products.forEach(({ node: product }) => {
+        product.variants.edges.forEach(({ node: variant }) => {
+            const metaValue = variant.metafield?.value;
+            if (metaValue) {
+                initialAdjustments[variant.id] = parseFloat(metaValue);
+            }
+        });
     });
-
-    // Create a map of variantId -> adjustment
-    const initialAdjustments = adjustments.reduce((acc, curr) => {
-        acc[curr.variantId] = curr.adjustment;
-        return acc;
-    }, {});
 
     return { products, pageInfo, totalCount, initialAdjustments };
 };
@@ -102,74 +105,43 @@ export const action = async ({ request }) => {
 
         // Process updates and deletions
         for (const update of updates) {
-            // If adjustment is empty, delete the entry
-            if (update.adjustment === '' || update.adjustment === null) {
-                await prisma.priceAdjustment.deleteMany({
-                    where: {
-                        shop: session.shop,
-                        variantId: update.variantId
-                    }
-                });
-            } else {
-                // Otherwise upsert the value
-                // Otherwise manual check to prevent burning IDs
-                const where = {
-                    shop_variantId: {
-                        shop: session.shop,
-                        variantId: update.variantId
-                    }
-                };
-                const existing = await prisma.priceAdjustment.findUnique({ where });
+            // Sync to Shopify Metafield (No DB)
+            const valueToSet = (update.adjustment === '' || update.adjustment === null) ? null : String(update.adjustment);
 
-                if (existing) {
-                    await prisma.priceAdjustment.update({
-                        where,
-                        data: { adjustment: parseFloat(update.adjustment) }
-                    });
-                } else {
-                    await prisma.priceAdjustment.create({
-                        data: {
-                            shop: session.shop,
-                            variantId: update.variantId,
-                            adjustment: parseFloat(update.adjustment)
+            await admin.graphql(
+                `#graphql
+                mutation metaFieldSet($metafields: [MetafieldsSetInput!]!) {
+                    metafieldsSet(metafields: $metafields) {
+                        metafields {
+                            id
+                            key
+                            value
                         }
-                    });
+                        userErrors {
+                            field
+                            message
+                        }
+                    }
+                }`,
+                {
+                    variables: {
+                        metafields: [
+                            {
+                                ownerId: update.variantId,
+                                namespace: "app",
+                                key: "original_price",
+                                value: valueToSet,
+                                type: "number_decimal"
+                            }
+                        ]
+                    }
                 }
-            }
+            );
         }
-
         return { success: true, count: updates.length };
     }
 
-    const variantId = formData.get("variantId");
-    const adjustment = formData.get("adjustment");
-
-    if (variantId && adjustment) {
-        const where = {
-            shop_variantId: {
-                shop: session.shop,
-                variantId: variantId
-            }
-        };
-        const existing = await prisma.priceAdjustment.findUnique({ where });
-
-        if (existing) {
-            await prisma.priceAdjustment.update({
-                where,
-                data: { adjustment: parseFloat(adjustment) }
-            });
-        } else {
-            await prisma.priceAdjustment.create({
-                data: {
-                    shop: session.shop,
-                    variantId: variantId,
-                    adjustment: parseFloat(adjustment)
-                }
-            });
-        }
-    }
-
-    return { success: true, variantId, adjustment };
+    return { success: true };
 };
 
 export default function B2BPricing() {
@@ -294,12 +266,34 @@ export default function B2BPricing() {
         filteredProducts.forEach(({ node: product }) => {
             const selectedVariant = getSelectedVariant(product);
             if (selectedVariant) {
-                const adjustment = priceAdjustments[selectedVariant.id];
-                // Include if there's a value in state (even if empty string)
-                if (adjustment !== undefined) {
+                const currentVal = priceAdjustments[selectedVariant.id];
+                const initialVal = initialAdjustments[selectedVariant.id];
+
+                // Convert both to string for comparison to avoid float issues, or standardized float
+                // initialVal is float or undefined
+                // currentVal is string or undefined (from state)
+
+                let hasChanged = false;
+
+                const normalizedCurrent = currentVal === "" || currentVal === undefined ? null : parseFloat(currentVal);
+                const normalizedInitial = initialVal === undefined ? null : initialVal;
+
+                if (normalizedCurrent !== normalizedInitial) {
+                    // Check for float precision differences if both are numbers
+                    if (normalizedCurrent !== null && normalizedInitial !== null) {
+                        if (Math.abs(normalizedCurrent - normalizedInitial) > 0.001) {
+                            hasChanged = true;
+                        }
+                    } else {
+                        // One is null, the other is not
+                        hasChanged = true;
+                    }
+                }
+
+                if (hasChanged) {
                     updates.push({
                         variantId: selectedVariant.id,
-                        adjustment: adjustment
+                        adjustment: currentVal // Pass the raw string/value to action
                     });
                 }
             }
