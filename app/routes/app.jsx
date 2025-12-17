@@ -23,6 +23,7 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <NavMenu>
         <s-link href="/app" rel="home">Home</s-link>
+        <s-link href="/app/b2b-pricing">B2B Pricing</s-link>
         <s-link href="/app/update-product-prices">Update Product Prices</s-link>
         <s-link href="/app/export-product-prices">Export Product Prices</s-link>
         <s-link href="/app/how-to-use">How To Use</s-link>
