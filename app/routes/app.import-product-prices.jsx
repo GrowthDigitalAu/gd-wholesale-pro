@@ -367,7 +367,7 @@ export default function PriceUpdate() {
         <s-page heading="Bulk Price Update">
             <s-box paddingBlockStart="large">
                 <s-section
-                    heading="Upload an Excel file with SKU, Price, and CompareAt Price columns.">
+                    heading="Import an Excel file with SKU, Price, and CompareAt Price columns.">
 
                     <input
                         ref={fileInputRef}
@@ -383,7 +383,7 @@ export default function PriceUpdate() {
                         loading={isLoading ? "true" : undefined}
                         paddingBlock="large"
                     >
-                        Update Product Prices
+                        Import Product Prices
                     </s-button>
                 </s-section>
             </s-box>

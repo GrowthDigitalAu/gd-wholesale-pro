@@ -1,5 +1,10 @@
 query RunInput {
   cart {
+    buyerIdentity {
+      customer {
+        hasAnyTag(tags: ["b2b"])
+      }
+    }
     lines {
       id
       quantity

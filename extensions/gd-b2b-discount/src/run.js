@@ -21,6 +21,11 @@ const EMPTY_DISCOUNT = {
 export function run(input) {
   const discounts = [];
 
+  const customer = input.cart.buyerIdentity?.customer;
+  if (!customer || !customer.hasAnyTag) {
+    return EMPTY_DISCOUNT;
+  }
+
   for (const line of input.cart.lines) {
     if (line.merchandise) {
       const metaValue = line.merchandise.metafield?.value;
