@@ -6,28 +6,151 @@
   {% endif %}
 {% endfor %}
 
-{% assign b2b_price = selected_product.selected_or_first_available_variant.metafields.app.original_price.value
-  | times: 100
-%}
-{% if has_b2b_tag and b2b_price > 0 %}
-  <div>
-    <span>{{ b2b_price | money }}</span>
-    <span style="text-decoration: line-through;">
-      {{- selected_product.price | money -}}
-    </span>
-  </div>
-{% elsif selected_product.compare_at_price > selected_product.price %}
-  <div>
-    <span>{{ selected_product.price | money }}</span>
-    <span style="text-decoration: line-through;">
-      {{- selected_product.compare_at_price | money -}}
-    </span>
-  </div>
-{% else %}
-  <div>
-    <span>{{ selected_product.price | money }}</span>
-  </div>
-{% endif %}
+<div id="b2b-price-container-{{ block.id }}" class="b2b-price-container">
+  {% assign current_variant = selected_product.selected_or_first_available_variant %}
+  {% assign b2b_price = current_variant.metafields.app.original_price.value | times: 100 %}
+
+  {% if has_b2b_tag and b2b_price > 0 %}
+    <div class="b2b-price-wrapper b2b-customer-price">
+      <span class="b2b-price-current">{{ b2b_price | money }}</span>
+      <span class="b2b-price-original" style="text-decoration: line-through;">
+        {{- current_variant.price | money -}}
+      </span>
+    </div>
+  {% elsif current_variant.compare_at_price > current_variant.price %}
+    <div class="b2b-price-wrapper b2b-regular-sale">
+      <span class="b2b-price-current">{{ current_variant.price | money }}</span>
+      <span class="b2b-price-compare" style="text-decoration: line-through;">
+        {{- current_variant.compare_at_price | money -}}
+      </span>
+    </div>
+  {% else %}
+    <div class="b2b-price-wrapper b2b-regular-price">
+      <span class="b2b-price-current">{{ current_variant.price | money }}</span>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  (function() {
+    const isB2B = {{ has_b2b_tag | json }};
+    const moneyFormat = {{ shop.money_format | json }};
+
+    const variantsData = {
+      {% for variant in selected_product.variants %}
+        "{{ variant.id }}": {
+          price: {{ variant.price }},
+          compare_at_price: {{ variant.compare_at_price | default: 'null' }},
+          b2b_price: {{ variant.metafields.app.original_price.value | times: 100 | default: 'null' }}
+        }{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    };
+
+    function formatMoney(cents, format) {
+      if (typeof cents === 'string') cents = cents.replace('.', '');
+      let value = '';
+      const placeholderRegex = /\{\{\s*(\w+)\s*\}\}/;
+      const formatString = format || "${{amount}}";
+
+      function defaultOption(opt, def) {
+         return (typeof opt == 'undefined' ? def : opt);
+      }
+
+      function formatWithDelimiters(number, precision, thousands, decimal) {
+        precision = defaultOption(precision, 2);
+        thousands = defaultOption(thousands, ',');
+        decimal   = defaultOption(decimal, '.');
+
+        if (isNaN(number) || number == null) { return 0; }
+
+        number = (number/100.0).toFixed(precision);
+
+        var parts   = number.split('.'),
+            dollars = parts[0].replace(/(\d)(?=(\d\d\d)+(?!\d))/g, '$1' + thousands),
+            cents   = parts[1] ? (decimal + parts[1]) : '';
+
+        return dollars + cents;
+      }
+
+      switch(formatString.match(placeholderRegex)[1]) {
+        case 'amount':
+          value = formatWithDelimiters(cents, 2);
+          break;
+        case 'amount_no_decimals':
+          value = formatWithDelimiters(cents, 0);
+          break;
+        case 'amount_with_comma_separator':
+          value = formatWithDelimiters(cents, 2, '.', ',');
+          break;
+        case 'amount_no_decimals_with_comma_separator':
+          value = formatWithDelimiters(cents, 0, '.', ',');
+          break;
+      }
+
+      return formatString.replace(placeholderRegex, value);
+    }
+
+    function updatePriceDisplay(variantId) {
+      const container = document.getElementById("b2b-price-container-{{ block.id }}");
+      if (!container) return;
+
+      const data = variantsData[variantId];
+      if (!data) return;
+
+      let html = '';
+
+      if (isB2B && data.b2b_price && data.b2b_price > 0) {
+         html = `
+            <div class="b2b-price-wrapper b2b-customer-price">
+                <span class="b2b-price-current">${formatMoney(data.b2b_price, moneyFormat)}</span>
+                <span class="b2b-price-original" style="text-decoration: line-through;">
+                  ${formatMoney(data.price, moneyFormat)}
+                </span>
+            </div>
+         `;
+      } 
+      else if (data.compare_at_price && data.compare_at_price > data.price) {
+         html = `
+            <div class="b2b-price-wrapper b2b-regular-sale">
+                <span class="b2b-price-current">${formatMoney(data.price, moneyFormat)}</span>
+                <span class="b2b-price-compare" style="text-decoration: line-through;">
+                  ${formatMoney(data.compare_at_price, moneyFormat)}
+                </span>
+            </div>
+         `;
+      }
+      else {
+         html = `
+            <div class="b2b-price-wrapper b2b-regular-price">
+                <span class="b2b-price-current">${formatMoney(data.price, moneyFormat)}</span>
+            </div>
+         `;
+      }
+
+      container.innerHTML = html;
+    }
+
+    let currentVariantId = "{{ selected_product.selected_or_first_available_variant.id }}";
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialUrlVariant = urlParams.get('variant');
+    if (initialUrlVariant && initialUrlVariant !== currentVariantId) {
+        currentVariantId = initialUrlVariant;
+        updatePriceDisplay(currentVariantId);
+    }
+
+    setInterval(() => {
+        const params = new URLSearchParams(window.location.search);
+        const variantFromUrl = params.get('variant');
+        
+        if (variantFromUrl && variantFromUrl !== currentVariantId) {
+            currentVariantId = variantFromUrl;
+            updatePriceDisplay(variantFromUrl);
+        }
+    }, 500);
+
+  })();
+</script>
 
 {% schema %}
 {
