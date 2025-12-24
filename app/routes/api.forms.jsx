@@ -27,7 +27,8 @@ export const loader = async ({ request }) => {
   return Response.json({ 
      id: form.id, 
      title: form.title, 
-     fields: JSON.parse(form.fields) 
+    fields: JSON.parse(form.fields),
+    settings: form.settings
   }, { headers: corsHeaders });
 };
 

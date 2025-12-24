@@ -45,6 +45,7 @@ model Form {
   id        Int      @id @default(autoincrement())
   title     String
   fields    String   // JSON string storing field configurations
+  settings  String?  // JSON string for UI settings (subtitle, button text, css, etc)
   shop      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -29,3 +29,8 @@ redirect_urls = [
     "https://gd-priceupdator-pro.onrender.com/auth/shopify/callback",
     "https://gd-priceupdator-pro.onrender.com/api/auth/callback"
 ]
+
+[app_proxy]
+url = "https://gd-priceupdator-pro.onrender.com/api"
+subpath = "proxy"
+prefix = "apps"
