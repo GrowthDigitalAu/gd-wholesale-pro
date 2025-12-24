@@ -275,6 +275,34 @@
                 o.value = opt;
                 input.appendChild(o);
               });
+            } else if (field.type === 'radio') {
+                const radioGroup = document.createElement('div');
+                radioGroup.className = 'gd-form-radio-group';
+                radioGroup.style.padding = '5px 0';
+                
+                field.options.forEach(opt => {
+                    const rWrapper = document.createElement('div');
+                    rWrapper.style.display = 'flex';
+                    rWrapper.style.alignItems = 'center';
+                    rWrapper.style.marginBottom = '5px';
+                    
+                    const rInput = document.createElement('input');
+                    rInput.type = 'radio';
+                    rInput.name = field.id;
+                    rInput.value = opt;
+                    // Radio required logic handled by browser if name matches
+                    if(field.required) rInput.required = true;
+                    
+                    const rLabel = document.createElement('span');
+                    rLabel.innerText = opt;
+                    rLabel.style.marginLeft = '8px';
+                    rLabel.style.color = settings.labelColor || '#000';
+                    
+                    rWrapper.appendChild(rInput);
+                    rWrapper.appendChild(rLabel);
+                    radioGroup.appendChild(rWrapper);
+                });
+                wrapper.appendChild(radioGroup);
             } else if (field.type === 'checkbox') {
               const cbWrapper = document.createElement('div');
               cbWrapper.className = 'gd-form-checkbox-wrapper';
@@ -297,19 +325,22 @@
               cbWrapper.appendChild(cbLabel);
               wrapper.appendChild(cbWrapper);
             } else {
+              // Handles text, email, number, date, file
               input = document.createElement('input');
               input.type = field.type;
               input.className = 'gd-form-input';
               commonInputStyles(input);
             }
 
-            if (field.type !== 'checkbox') {
-                if (field.placeholder) input.placeholder = field.placeholder;
+            if (field.type !== 'checkbox' && field.type !== 'radio') {
+                if (field.placeholder && field.type !== 'date' && field.type !== 'file') input.placeholder = field.placeholder;
                 wrapper.appendChild(input);
             }
             
-            input.name = field.id;
-            if (field.required) input.required = true;
+            if (input) {
+                input.name = field.id;
+                if (field.required) input.required = true;
+            }
         }
 
         formContainer.appendChild(wrapper);

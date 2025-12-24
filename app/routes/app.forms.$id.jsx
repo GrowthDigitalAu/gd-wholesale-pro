@@ -209,11 +209,32 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
                 <option>Select...</option>
                 {field.options?.map(opt => <option key={opt}>{opt}</option>)}
               </select>
+                ) : field.type === 'radio' ? (
+                  <div style={{ pointerEvents: 'none' }}>
+                    {field.options?.length > 0 ? field.options.map((opt, i) => (
+                      <div key={i} style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input type="radio" disabled />
+                        <span style={{ color: styleSettings?.labelColor || '#000' }}>{opt}</span>
+                      </div>
+                    )) : <Text tone="subdued">No options defined</Text>}
+                  </div>
             ) : field.type === 'checkbox' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
                 <input type="checkbox" disabled />
                 <span style={{ color: styleSettings?.labelColor }}>{field.placeholder || "Checkbox text"}</span>
               </div>
+                    ) : field.type === 'file' ? (
+                      <input
+                        type="file"
+                        disabled
+                        style={{ ...inputStyle, padding: '4px' }}
+                      />
+                    ) : field.type === 'date' ? (
+                      <input
+                        type="date"
+                        disabled
+                        style={{ ...inputStyle }}
+                      />
             ) : (
               <input
                 type={field.type}
@@ -290,8 +311,11 @@ export default function FormEditor() {
     { label: "Paragraph Text", value: "textarea" },
     { label: "Email", value: "email" },
     { label: "Number", value: "number" },
+    { label: "Date / Birthday", value: "date" },
     { label: "Dropdown", value: "select" },
+    { label: "Radio Buttons", value: "radio" },
     { label: "Checkbox", value: "checkbox" },
+    { label: "File Upload", value: "file" },
     { label: "Section Header", value: "header" },
   ];
 
@@ -638,7 +662,7 @@ export default function FormEditor() {
                                 />
                               )}
 
-                                  {field.type === 'select' && (
+                              {(field.type === 'select' || field.type === 'radio') && (
                                      <TextField
                                          label="Options (comma separated)"
                                          value={field.options?.join(', ')}
