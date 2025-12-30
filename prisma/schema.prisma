@@ -57,5 +57,6 @@ model FormSubmission {
   formId    Int
   form      Form     @relation(fields: [formId], references: [id])
   data      String   // JSON string storing submission data
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
   createdAt DateTime @default(now())
 }

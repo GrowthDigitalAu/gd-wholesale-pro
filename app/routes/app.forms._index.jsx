@@ -1,6 +1,7 @@
 import { useLoaderData, Link, useRouteError, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Page, Layout, Card, ResourceList, ResourceItem, Text, Button, EmptyState, IndexTable, BlockStack } from "@shopify/polaris";
+import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
@@ -98,9 +99,8 @@ export default function Forms() {
   );
 
   return (
-    <Page
-      title="Custom Forms"
-    >
+    <Page>
+      <TitleBar title="Custom Forms" />
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">

@@ -1,6 +1,7 @@
 import { useLoaderData, useSubmit, useNavigation, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Page, Layout, Card, IndexTable, Text, Button, EmptyState, useIndexResourceState } from "@shopify/polaris";
+import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
@@ -70,10 +71,8 @@ export default function Submissions() {
   };
 
   return (
-    <Page
-      title={`Submissions for "${form.title}"`}
-      backAction={{ url: `/app/forms/${form.id}` }}
-    >
+    <Page>
+      <TitleBar title={`Submissions for "${form.title}"`} />
       <Layout>
         <Layout.Section>
           <Card padding="0">
