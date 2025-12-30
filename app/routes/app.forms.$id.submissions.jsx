@@ -111,7 +111,17 @@ export default function Submissions() {
                       
                       {formFields.map(f => (
                           <IndexTable.Cell key={f.id}>
-                              {row[f.label] || '-'}
+                          {(() => {
+                            const val = row[f.label];
+                            if (val && typeof val === 'object' && val._type === 'file') {
+                              return (
+                                <a href={val.content} download={val.name} style={{ textDecoration: 'none', color: '#2c6ecb', fontWeight: 500 }}>
+                                  Download {val.name.length > 20 ? val.name.substring(0, 20) + '...' : val.name}
+                                </a>
+                              );
+                            }
+                            return typeof val === 'object' ? JSON.stringify(val) : (val || '-');
+                          })()}
                           </IndexTable.Cell>
                       ))}
 

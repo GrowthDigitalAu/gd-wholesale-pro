@@ -356,20 +356,50 @@
         submitBtn.innerText = 'Please wait...';
 
         const formData = {};
-        form.fields.forEach((f) => {
-          if (f.type === 'header') return;
-          
-          const el = formEl.elements[f.id];
-          if (!el) return;
+        
+        const processField = async (f) => {
+           if (f.type === 'header') return;
+           
+           const el = formEl.elements[f.id];
+           if (!el) return;
 
-          if (f.type === 'checkbox') {
-            formData[f.label] = el.checked ? 'Yes' : 'No';
-          } else {
-            formData[f.label] = el.value;
-          }
-        });
+           if (f.type === 'checkbox') {
+             formData[f.label] = el.checked ? 'Yes' : 'No';
+           } else if (f.type === 'file') {
+             if (el.files && el.files[0]) {
+                const getBase64 = (file) => {
+                    return new Promise((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.readAsDataURL(file);
+                      reader.onload = () => resolve(reader.result);
+                      reader.onerror = error => reject(error);
+                    });
+                };
+                
+                try {
+                    const file = el.files[0];
+                    const base64 = await getBase64(file);
+                    // Store as an object we can identify later
+                    formData[f.label] = {
+                        _type: 'file',
+                        name: file.name,
+                        content: base64
+                    };
+                } catch (err) {
+                    console.error("Error reading file", err);
+                    formData[f.label] = "Error uploading file";
+                }
+             } else {
+                formData[f.label] = "";
+             }
+           } else {
+             formData[f.label] = el.value;
+           }
+        };
 
         try {
+          await Promise.all(form.fields.map(processField));
+
           const res = await fetch('/apps/proxy/forms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -382,6 +412,7 @@
             throw new Error('Submission failed');
           }
         } catch (err) {
+          console.error(err);
           const msg = document.createElement('div');
           msg.className = 'gd-form-message gd-form-error';
           msg.innerText = 'Error submitting form. Please try again.';
