@@ -1,6 +1,6 @@
 import { useLoaderData, Link, useRouteError, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Page, Layout, Card, ResourceList, ResourceItem, Text, Button, EmptyState, InlineStack, BlockStack } from "@shopify/polaris";
+import { Page, Layout, Card, ResourceList, ResourceItem, Text, Button, EmptyState } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
@@ -41,7 +41,7 @@ export default function Forms() {
 
   return (
     <Page
-      title="Custom Form"
+      title="Custom Forms"
     >
       <Layout>
         <Layout.Section>
@@ -52,7 +52,7 @@ export default function Forms() {
                 action={{ content: "Create Form", url: "/app/forms/new" }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Build custom form to collect information from your customers.</p>
+                <p>Build custom forms to collect information from your customers.</p>
               </EmptyState>
             ) : (
               <ResourceList
@@ -63,22 +63,22 @@ export default function Forms() {
                     id={item.id}
                     url={`/app/forms/${item.id}`}
                     accessibilityLabel={`View details for ${item.title}`}
+                    shortcutActions={[
+                      {
+                        content: 'Edit',
+                        url: `/app/forms/${item.id}`,
+                      },
+                      {
+                        content: 'Delete',
+                        destructive: true,
+                        onAction: () => handleDelete(item.id),
+                      },
+                    ]}
                   >
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="200">
-                        <Text variant="bodyMd" fontWeight="bold" as="h3">
-                          {item.title}
-                        </Text>
-                        <div>Field count: {JSON.parse(item.fields).length}</div>
-                      </BlockStack>
-                      <InlineStack gap="200">
-                        <Button variant="primary" url={`/app/forms/${item.id}`}>Edit</Button>
-                        <Button tone="critical" onClick={(e) => {
-                          e.stopPropagation(); // Prevent row click
-                          handleDelete(item.id);
-                        }}>Delete</Button>
-                      </InlineStack>
-                    </InlineStack>
+                    <Text variant="bodyMd" fontWeight="bold" as="h3">
+                      {item.title}
+                    </Text>
+                    <div>Field count: {JSON.parse(item.fields).length}</div>
                   </ResourceItem>
                 )}
               />

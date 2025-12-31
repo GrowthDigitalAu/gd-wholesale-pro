@@ -1,12 +1,9 @@
-import { useLoaderData, useSubmit, useNavigation, Form as RemixForm, redirect, useRouteError, useActionData } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, Form as RemixForm, redirect, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Page, Layout, Card, TextField, Button, BlockStack, Text, Select, Checkbox, InlineStack, Banner } from "@shopify/polaris";
-import { useState, useEffect, useRef } from "react";
+import { Page, Layout, Card, TextField, Button, BlockStack, Box, Card as PolarisCard, Text, Select, Checkbox, InlineStack, Banner } from "@shopify/polaris";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import formEditorStyles from "../styles/form-editor.css?url";
-
-export const links = () => [{ rel: "stylesheet", href: formEditorStyles }];
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -39,10 +36,7 @@ export const action = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const title = formData.get("title");
-  const content = formData.get("content");
   const fields = formData.get("fields");
-  const buttonLabel = formData.get("buttonLabel");
-  const disclaimer = formData.get("disclaimer");
 
   if (params.id === "new") {
     const existingCount = await db.form.count({
@@ -55,10 +49,7 @@ export const action = async ({ request, params }) => {
     const form = await db.form.create({
       data: {
         title,
-        content,
         fields,
-        buttonLabel,
-        disclaimer,
         shop: session.shop,
       },
     });
@@ -68,10 +59,7 @@ export const action = async ({ request, params }) => {
       where: { id: parseInt(params.id) },
       data: {
         title,
-        content,
         fields,
-        buttonLabel,
-        disclaimer,
       },
     });
     return { status: "success" };
@@ -80,37 +68,13 @@ export const action = async ({ request, params }) => {
 
 export default function FormEditor() {
   const { form } = useLoaderData();
-  const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSaving = navigation.state === "submitting";
 
   const [title, setTitle] = useState(form?.title || "");
-  const [content, setContent] = useState(form?.content || "");
   const [fields, setFields] = useState(form ? JSON.parse(form.fields) : []);
-  const [buttonLabel, setButtonLabel] = useState(form?.buttonLabel || "Submit");
-  const [disclaimer, setDisclaimer] = useState(form?.disclaimer || "");
   const [activeField, setActiveField] = useState(null);
-  const [titleError, setTitleError] = useState(null);
-
-  // Store initial state for change detection
-  const initialTitle = useRef(form?.title || "");
-  const initialContent = useRef(form?.content || "");
-  const initialFields = useRef(form ? JSON.parse(form.fields) : []);
-  const initialButtonLabel = useRef(form?.buttonLabel || "Submit");
-  const initialDisclaimer = useRef(form?.disclaimer || "");
-
-  useEffect(() => {
-    if (actionData?.status === "success") {
-      shopify.toast.show("Form saved");
-      // Update initial state after successful save
-      initialTitle.current = title;
-      initialContent.current = content;
-      initialFields.current = fields;
-      initialButtonLabel.current = buttonLabel;
-      initialDisclaimer.current = disclaimer;
-    }
-  }, [actionData]);
 
   // Field Types
   const fieldTypes = [
@@ -144,29 +108,9 @@ export default function FormEditor() {
   };
 
   const handleSave = () => {
-    if (!title.trim()) {
-      setTitleError("Form title is required");
-      shopify.toast.show("Form title is required");
-      return;
-    }
-
-    const isTitleChanged = title !== initialTitle.current;
-    const isContentChanged = content !== initialContent.current;
-    const isFieldsChanged = JSON.stringify(fields) !== JSON.stringify(initialFields.current);
-    const isButtonLabelChanged = buttonLabel !== initialButtonLabel.current;
-    const isDisclaimerChanged = disclaimer !== initialDisclaimer.current;
-
-    if (!isTitleChanged && !isContentChanged && !isFieldsChanged && !isButtonLabelChanged && !isDisclaimerChanged) {
-      shopify.toast.show("No changes to save");
-      return;
-    }
-
     const formData = new FormData();
     formData.append("title", title);
-    formData.append("content", content);
     formData.append("fields", JSON.stringify(fields));
-    formData.append("buttonLabel", buttonLabel);
-    formData.append("disclaimer", disclaimer);
     submit(formData, { method: "post" });
   };
 
@@ -185,66 +129,44 @@ export default function FormEditor() {
         <Layout.Section>
            <Card>
               <BlockStack gap="400">
-                <TextField 
-                  label="Form Title" 
-                  value={title} 
-                  onChange={(val) => {
-                    setTitle(val);
-                    if (titleError) setTitleError(null);
-                  }} 
-                  autoComplete="off" 
-                  error={titleError}
-                />
-                 <TextField 
-                  label="Content" 
-                  value={content} 
-                  onChange={setContent} 
-                  autoComplete="off" 
-                  multiline={4}
-                />
+                <TextField label="Form Title" value={title} onChange={setTitle} autoComplete="off" />
                 
-                <div className="form-preview-container">
+                <Box padding="400" background="bg-surface-secondary" borderRadius="200">
                     <Text variant="headingSm" as="h5">Form Preview</Text>
-                    <div className="preview-header">
-                         <Text variant="headingXl" as="h2">{title || "Form Title"}</Text>
-                         {content && <div className="preview-content" key="content" suppressHydrationWarning>{content}</div>}
-                    </div>
-                    <div className="preview-fields-container">
+                    <div style={{ marginTop: '1rem' }}>
                         {fields.length === 0 && <Text tone="subdued">No fields added yet.</Text>}
                         {fields.map((field) => (
                           <div 
                               key={field.id} 
                               onClick={() => setActiveField(field.id)}
-                              className={`preview-field-item ${activeField === field.id ? 'active' : ''}`}
+                              style={{ 
+                                  padding: '10px', 
+                                  border: activeField === field.id ? '2px solid #5c6ac4' : '1px solid #e1e3e5', 
+                                  borderRadius: '4px',
+                                  marginBottom: '10px',
+                                  cursor: 'pointer',
+                                  background: 'white'
+                              }}
                           >
-                              <label className="preview-field-label">
-                                  {field.label} {field.required && <span className="required-star">*</span>}
+                              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px'}}>
+                                  {field.label} {field.required && <span style={{color:'red'}}>*</span>}
                               </label>
                               {field.type === 'textarea' ? (
-                                  <textarea disabled className="preview-textarea" autoComplete="off" />
+                                  <textarea disabled style={{width: '100%', padding: '5px'}} />
                               ) : field.type === 'select' ? (
-                                  <select disabled className="preview-input" autoComplete="off">
+                                  <select disabled style={{width: '100%', padding: '5px'}}>
                                       <option>Select...</option>
                                       {field.options?.map(opt => <option key={opt}>{opt}</option>)}
                                   </select>
                               ) : field.type === 'checkbox' ? (
-                                  <input type="checkbox" disabled className="preview-checkbox" autoComplete="off" />
+                                  <input type="checkbox" disabled />
                               ) : (
-                                  <input type={field.type} disabled className="preview-input" autoComplete="off" />
+                                  <input type={field.type} disabled style={{width: '100%', padding: '5px'}} />
                               )}
                           </div>
                         ))}
                     </div>
-                    {/* Submit Button Preview */}
-                     <div className="preview-submit-wrapper">
-                        <Button variant="primary" fullWidth size="large">{buttonLabel || "Submit"}</Button>
-                        {disclaimer && (
-                            <div className="preview-disclaimer" key="disclaimer">
-                              <Text variant="bodySm" tone="subdued">{disclaimer}</Text>
-                            </div>
-                         )}
-                     </div>
-                </div>
+                </Box>
               </BlockStack>
            </Card>
         </Layout.Section>
@@ -260,26 +182,6 @@ export default function FormEditor() {
                             <Button key={ft.value} onClick={() => addField(ft.value)} size="micro">{ft.label}</Button>
                         ))}
                     </InlineStack>
-                </BlockStack>
-             </Card>
-
-             <Card>
-                <BlockStack gap="400">
-                    <Text variant="headingSm" as="h5">Submit Button Settings</Text>
-                    <TextField 
-                        label="Button label" 
-                        value={buttonLabel} 
-                        onChange={setButtonLabel} 
-                        autoComplete="off" 
-                    />
-                    <TextField 
-                        label="Consent disclaimer (optional)" 
-                        value={disclaimer} 
-                        onChange={setDisclaimer} 
-                        autoComplete="off" 
-                        multiline={3}
-                        helpText="Displayed below the submit button."
-                    />
                 </BlockStack>
              </Card>
 
