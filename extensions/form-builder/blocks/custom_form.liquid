@@ -1,0 +1,192 @@
+{% schema %}
+{
+  "name": "Custom Form",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "form_id",
+      "label": "Form ID",
+      "info": "Enter the ID of the form you created in the app."
+    },
+    {
+      "type": "color",
+      "id": "btn_color",
+      "label": "Button Color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "btn_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff"
+    }
+  ]
+}
+{% endschema %}
+
+<div id="gd-custom-form-{{ block.id }}" class="gd-custom-form-wrapper">
+  <div class="gd-form-loading">Loading form...</div>
+</div>
+
+<style>
+  .gd-custom-form-wrapper {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .gd-form-field {
+    margin-bottom: 15px;
+  }
+  .gd-form-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+  }
+  .gd-form-field input, .gd-form-field select, .gd-form-field textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  .gd-form-submit {
+    background-color: {{ block.settings.btn_color }};
+    color: {{ block.settings.btn_text_color }};
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .gd-form-submit:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+  .gd-form-success {
+    color: green;
+    padding: 10px;
+    background: #e8f5e9;
+    border-radius: 4px;
+  }
+  .gd-form-error {
+    color: red;
+    padding: 10px;
+    background: #ffebee;
+    border-radius: 4px;
+  }
+</style>
+
+<script>
+  (function () {
+    const container = document.getElementById('gd-custom-form-{{ block.id }}');
+    const formId = '{{ block.settings.form_id }}';
+
+    if (!formId) {
+      container.innerHTML = '<div class="gd-form-error">Please configure a Form ID in the block settings.</div>';
+      return;
+    }
+
+    async function fetchForm() {
+      try {
+        const res = await fetch(`/apps/proxy/forms?id=${formId}`);
+        if (!res.ok) throw new Error('Failed to load form');
+        const data = await res.json();
+        renderForm(data);
+      } catch (err) {
+        container.innerHTML = `<div class="gd-form-error">Error loading form: ${err.message}</div>`;
+      }
+    }
+
+    function renderForm(form) {
+      // Clear loading
+      container.innerHTML = '';
+
+      const formEl = document.createElement('form');
+      formEl.innerHTML = `<h3>${form.title}</h3>`;
+
+      form.fields.forEach((field) => {
+        const div = document.createElement('div');
+        div.className = 'gd-form-field';
+
+        const label = document.createElement('label');
+        label.innerText = field.label + (field.required ? ' *' : '');
+        div.appendChild(label);
+
+        let input;
+        if (field.type === 'textarea') {
+          input = document.createElement('textarea');
+        } else if (field.type === 'select') {
+          input = document.createElement('select');
+          const defaultOpt = document.createElement('option');
+          defaultOpt.text = '- Select -';
+          defaultOpt.value = '';
+          input.appendChild(defaultOpt);
+
+          field.options.forEach((opt) => {
+            const o = document.createElement('option');
+            o.text = opt;
+            o.value = opt;
+            input.appendChild(o);
+          });
+        } else if (field.type === 'checkbox') {
+          input = document.createElement('input');
+          input.type = 'checkbox';
+          input.style.width = 'auto'; // Override 100% width
+        } else {
+          input = document.createElement('input');
+          input.type = field.type;
+        }
+
+        input.name = field.id;
+        if (field.required) input.required = true;
+
+        div.appendChild(input);
+        formEl.appendChild(div);
+      });
+
+      const submitBtn = document.createElement('button');
+      submitBtn.type = 'submit';
+      submitBtn.className = 'gd-form-submit';
+      submitBtn.innerText = 'Submit';
+      formEl.appendChild(submitBtn);
+
+      formEl.onsubmit = async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Submitting...';
+
+        const formData = {};
+        form.fields.forEach((f) => {
+          const el = formEl.elements[f.id];
+          if (f.type === 'checkbox') {
+            formData[f.label] = el.checked ? 'Yes' : 'No';
+          } else {
+            formData[f.label] = el.value;
+          }
+        });
+
+        try {
+          const res = await fetch('/apps/proxy/forms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ formId: form.id, data: formData }),
+          });
+
+          if (res.ok) {
+            container.innerHTML = '<div class="gd-form-success">Thank you! Your submission has been received.</div>';
+          } else {
+            throw new Error('Submission failed');
+          }
+        } catch (err) {
+          alert('Error submitting form. Please try again.');
+          submitBtn.disabled = false;
+          submitBtn.innerText = 'Submit';
+        }
+      };
+
+      container.appendChild(formEl);
+    }
+
+    fetchForm();
+  })();
+</script>
