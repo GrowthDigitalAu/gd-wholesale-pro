@@ -1,5 +1,5 @@
 import { useLoaderData, useSubmit, useNavigation, Form as RemixForm, redirect, useRouteError, useActionData, useNavigate } from "react-router";
-import { Page, Layout, Card, TextField, Button, BlockStack, Box, Text, Select, Checkbox, InlineStack, Banner, Divider, Badge, Icon, Tooltip, IndexTable, EmptyState, ColorPicker, RangeSlider, Collapsible, ButtonGroup } from "@shopify/polaris";
+import { Page, Layout, Card, TextField, Button, BlockStack, Box, Text, Select, Checkbox, InlineStack, Banner, Divider, Badge, Icon, Tooltip, IndexTable, EmptyState, ColorPicker, RangeSlider, Collapsible, ButtonGroup, Tabs } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { DeleteIcon, DuplicateIcon, ClipboardIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { useState, useEffect, useCallback } from "react";
@@ -154,17 +154,51 @@ export const action = async ({ request, params }) => {
       const userErrors = responseJson.data?.customerCreate?.userErrors;
 
       if (userErrors && userErrors.length > 0) {
-        // Check if error is "Customer already exists" - if so, just update tag
+        // Check if error is "Customer already exists" ("taken")
         if (userErrors[0].message.includes("taken")) {
-          // Try to update existing customer? For now, let's just error or maybe we should proceed to approve anyway?
-          // Let's assume approval means "Grant B2B status". So we should find and update.
-          // For simplicity in this step, let's just mark approved but warn.
-          // Actually, the user requirement is "add this customer add in admin side and add tag".
-          // If they exist, we should probably add the tag.
-          // Let's just mark approved in DB for now and warn user.
-          // Better: Allow standard flow to error out if taken, forcing manual intervention or improvement later.
-          // But to be helpful, let's just log and update DB.
-          console.warn("Customer creation failed:", userErrors);
+          // Fetch existing customer ID and Tags
+          const customerQuery = await admin.graphql(
+            `#graphql
+               query getCustomer($query: String!) {
+                 customers(first: 1, query: $query) {
+                   edges {
+                     node {
+                       id
+                       tags
+                     }
+                   }
+                 }
+               }`,
+            { variables: { query: `email:${email}` } }
+          );
+          const customerJson = await customerQuery.json();
+          const existingCustomer = customerJson.data?.customers?.edges?.[0]?.node;
+
+          if (existingCustomer) {
+            const currentTags = existingCustomer.tags || [];
+            if (!currentTags.includes("B2B_customer")) {
+              const newTags = [...currentTags, "B2B_customer"];
+              const updateResponse = await admin.graphql(
+                `#graphql
+                    mutation updateCustomer($input: CustomerInput!) {
+                      customerUpdate(input: $input) {
+                        userErrors {
+                          field
+                          message
+                        }
+                      }
+                    }`,
+                { variables: { input: { id: existingCustomer.id, tags: newTags } } }
+              );
+              const updateJson = await updateResponse.json();
+              if (updateJson.data?.customerUpdate?.userErrors?.length > 0) {
+                return { status: "error", message: "Failed to update existing customer tags: " + updateJson.data.customerUpdate.userErrors[0].message };
+              }
+            }
+            // Proceed to approve (fall through)
+          } else {
+            return { status: "error", message: "Email taken but could not find existing customer in Shopify." };
+          }
         } else {
           return { status: "error", message: "Shopify Error: " + userErrors[0].message };
         }
@@ -380,6 +414,28 @@ export default function FormEditor() {
   }, [form]);
 
   const [activeField, setActiveField] = useState(null);
+  const [selectedTab, setSelectedTab] = useState(0);
+
+  const tabs = [
+    { id: 'all', content: 'All' },
+    { id: 'pending', content: 'Pending' },
+    { id: 'approved', content: 'Approved' },
+    { id: 'rejected', content: 'Rejected' },
+  ];
+
+  const filteredSubmissions = form?.submissions?.filter((sub) => {
+    switch (selectedTab) {
+      case 1: // Pending
+        return !sub.status || sub.status === 'PENDING';
+      case 2: // Approved
+        return sub.status === 'APPROVED';
+      case 3: // Rejected
+        return sub.status === 'REJECTED';
+      default: // All
+        return true;
+    }
+  }) || [];
+
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -775,41 +831,35 @@ export default function FormEditor() {
               <Card>
                 <BlockStack gap="400">
                   <Text variant="headingMd" as="h2">Form Submissions</Text>
-                  {form.submissions.length === 0 ? (
+
+                  <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
+                    {/* Tabs content handling is done by filtering logic below */}
+                  </Tabs>
+
+                  {filteredSubmissions.length === 0 ? (
                     <EmptyState
-                      heading="No submissions yet"
+                      heading="No submissions found"
                       image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                     >
-                      <p>When customers fill out this form, their data will appear here.</p>
+                      <p>No submissions match the selected filter.</p>
                     </EmptyState>
                   ) : (
                     <IndexTable
                       resourceName={{ singular: 'submission', plural: 'submissions' }}
-                      itemCount={form.submissions.length}
+                        itemCount={filteredSubmissions.length}
                       headings={[
-                        { title: 'Date' },
+                        { title: 'Customer Details' },
                         { title: 'Status' },
-                        { title: 'Data' },
+                        { title: 'Date' },
                         { title: 'Actions' }
                       ]}
                       selectable={false}
                     >
-                      {form.submissions.map((sub, index) => {
+                        {filteredSubmissions.map((sub, index) => {
                         const data = JSON.parse(sub.data);
                         return (
                           <IndexTable.Row id={sub.id} key={sub.id} position={index}>
-                            <IndexTable.Cell>
-                              {new Date(sub.createdAt).toLocaleString()}
-                            </IndexTable.Cell>
-                            <IndexTable.Cell>
-                              {sub.status === 'APPROVED' ? (
-                                <Badge tone="success">Approved</Badge>
-                              ) : sub.status === 'REJECTED' ? (
-                                <Badge tone="critical">Rejected</Badge>
-                              ) : (
-                                <Badge tone="attention">Pending</Badge>
-                              )}
-                            </IndexTable.Cell>
+
                             <IndexTable.Cell>
                               <div style={{ whiteSpace: 'pre-wrap' }}>
                                 {Object.entries(data).map(([k, v]) => (
@@ -872,8 +922,20 @@ export default function FormEditor() {
                               </div>
                             </IndexTable.Cell>
                             <IndexTable.Cell>
-                              {(!sub.status || sub.status === 'PENDING') && (
-                                <ButtonGroup>
+                              {sub.status === 'APPROVED' ? (
+                                <Badge tone="success">Approved</Badge>
+                              ) : sub.status === 'REJECTED' ? (
+                                <Badge tone="critical">Rejected</Badge>
+                              ) : (
+                                <Badge tone="attention">Pending</Badge>
+                              )}
+                            </IndexTable.Cell>
+                            <IndexTable.Cell>
+                              {new Date(sub.createdAt).toLocaleString()}
+                            </IndexTable.Cell>
+                            <IndexTable.Cell>
+                              <ButtonGroup>
+                                {sub.status !== 'APPROVED' && (
                                   <Button
                                     size="slim"
                                     variant="primary"
@@ -881,6 +943,8 @@ export default function FormEditor() {
                                   >
                                     Approve
                                   </Button>
+                                )}
+                                {sub.status !== 'REJECTED' && (
                                   <Button
                                     size="slim"
                                     tone="critical"
@@ -888,8 +952,8 @@ export default function FormEditor() {
                                   >
                                     Reject
                                   </Button>
-                                </ButtonGroup>
-                              )}
+                                )}
+                              </ButtonGroup>
                             </IndexTable.Cell>
                           </IndexTable.Row>
                         );

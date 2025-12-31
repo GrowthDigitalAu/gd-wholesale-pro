@@ -59,6 +59,14 @@ export const action = async ({ request }) => {
   return { status: "ignored" };
 };
 
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
+
 export default function Forms() {
   const { forms, recentSubmissions } = useLoaderData();
   const submit = useSubmit();
@@ -99,7 +107,12 @@ export default function Forms() {
   );
 
   return (
-    <Page>
+    <s-page>
+      <s-section heading="Puzzle information">
+        <s-grid gap="base">
+
+        </s-grid>
+      </s-section>
       <TitleBar title="Custom Forms" />
       <Layout>
         <Layout.Section>
@@ -148,36 +161,32 @@ export default function Forms() {
             </Card>
 
             {recentSubmissions && recentSubmissions.length > 0 && (
-              <Card padding="0">
-                <div style={{ padding: '16px 16px 0 16px' }}>
-                  <Text variant="headingMd" as="h2">Recent Submissions</Text>
-                </div>
-                <IndexTable
-                  resourceName={{ singular: 'submission', plural: 'submissions' }}
-                  itemCount={recentSubmissions.length}
-                  headings={[
-                    { title: 'Form' },
-                    { title: 'Date' },
-                    { title: 'Data Snippet' },
-                    { title: 'Action' },
-                  ]}
-                  selectable={false}
-                >
-                  {rowMarkup}
-                </IndexTable>
-              </Card>
+              <BlockStack gap="200">
+                <Card gap="200">
+                  <div padding="base">
+                    <s-heading variant="headingXl" as="h2" padding="base">Online store dashboard</s-heading>
+                  </div>
+                  {/* <s-text variant="headingMd" as="h2">Your Section Title</s-text> */}
+                  {/* <Text variant="headingXl" as="h2" style={{ padding: '3px 10px 20px 10px', display: 'block' }}>Recent Submissions</Text> */}
+                  <IndexTable
+                    resourceName={{ singular: 'submission', plural: 'submissions' }}
+                    itemCount={recentSubmissions.length}
+                    headings={[
+                      { title: 'Form' },
+                      { title: 'Date' },
+                      { title: 'Data Snippet' },
+                      { title: 'Action' },
+                    ]}
+                    selectable={false}
+                  >
+                    {rowMarkup}
+                  </IndexTable>
+                </Card>
+              </BlockStack>
             )}
           </BlockStack>
         </Layout.Section>
       </Layout>
-    </Page>
+    </s-page>
   );
 }
-
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
-
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
