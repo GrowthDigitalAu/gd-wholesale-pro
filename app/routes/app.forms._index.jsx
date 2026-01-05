@@ -1,6 +1,6 @@
 import { useLoaderData, Link, useRouteError, useSubmit, useActionData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Page, Layout, Card, ResourceList, ResourceItem, Text, Button, EmptyState, IndexTable, BlockStack, Tabs, Badge, ButtonGroup } from "@shopify/polaris";
+import { EmptyState, Tabs } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -49,9 +49,15 @@ export const action = async ({ request }) => {
   const submissionId = formData.get("submissionId");
 
   if (intent === "delete" && formId) {
+    const pId = parseInt(formId);
+    // Delete related submissions first to avoid FK violation
+    await db.formSubmission.deleteMany({
+      where: { formId: pId },
+    });
+    
     await db.form.deleteMany({
       where: {
-        id: parseInt(formId),
+        id: pId,
         shop: session.shop,
       },
     });
@@ -263,193 +269,177 @@ export default function Forms() {
 
   return (
     <s-page>
-      <s-section heading="Puzzle information">
-        <s-grid gap="base">
-
-        </s-grid>
-      </s-section>
       <TitleBar title="Custom Forms" />
-      <Layout>
-        <Layout.Section>
-          <BlockStack gap="500">
-            <Card>
-              <BlockStack gap="200">
-                <Text variant="headingMd" as="h2">Your Forms</Text>
-                {forms.length === 0 ? (
-                  <EmptyState
-                    heading="Create your form"
-                    action={{ content: "Create Form", url: "/app/forms/new" }}
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                  >
-                    <p>Build custom forms to collect information from your customers.</p>
-                  </EmptyState>
-                ) : (
-                  <ResourceList
-                    resourceName={{ singular: "form", plural: "forms" }}
-                    items={forms}
-                    renderItem={(item) => (
-                      <ResourceItem
-                        id={item.id}
-                        url={`/app/forms/${item.id}`}
-                        accessibilityLabel={`View details for ${item.title}`}
-                        shortcutActions={[
-                          {
-                            content: 'Edit',
-                            url: `/app/forms/${item.id}`,
-                          },
-                          {
-                            content: 'Delete',
-                            destructive: true,
-                            onAction: () => handleDelete(item.id),
-                          },
-                        ]}
-                      >
-                        <Text variant="bodyMd" fontWeight="bold" as="h3">
-                          {item.title}
-                        </Text>
-                        <div>Field count: {JSON.parse(item.fields).length}</div>
-                      </ResourceItem>
-                    )}
-                  />
-                )}
-              </BlockStack>
-            </Card>
+      <s-box paddingBlockStart="large">
+        <s-section>
+          {forms.length === 0 ? (
+            <EmptyState
+              heading="Create your form"
+              action={{ content: "Create Form", url: "/app/forms/new" }}
+              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+            >
+              <p>Build custom form to collect information from your customers.</p>
+            </EmptyState>
+          ) : (
+            <s-stack>
+              <s-text variant="headingLg" type="strong">Your Form</s-text>
+              {forms.map((item, index) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '12px 16px',
+                    borderTop: index === 0 ? 'none' : '1px solid #e1e3e5'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <s-stack>
+                      <s-paragraph>
+                        <s-text type="strong">Form Name: </s-text>
+                        <s-text>{item.title}</s-text>
+                      </s-paragraph>
+                      <s-paragraph>
+                        <s-text type="strong">Field count: </s-text>
+                        <s-text>{JSON.parse(item.fields).length}</s-text>
+                      </s-paragraph>
+                    </s-stack>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <s-button url={`/app/forms/${item.id}`}>Edit</s-button>
+                      <s-button tone="critical" onClick={() => handleDelete(item.id)}>Delete</s-button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </s-stack>
+          )}
+        </s-section>
 
-            {recentSubmissions && recentSubmissions.length > 0 && (
-              <BlockStack gap="200">
-                <Card>
-                  <BlockStack gap="400">
-                    <Text variant="headingMd" as="h2">Form Submissions</Text>
-                    {/* <s-text variant="headingMd" as="h2">Your Section Title</s-text> */}
-                    {/* <Text variant="headingXl" as="h2" style={{ padding: '3px 10px 20px 10px', display: 'block' }}>Recent Submissions</Text> */}
-                    <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
+        {recentSubmissions && recentSubmissions.length > 0 && (
+          <s-box paddingBlockStart="large">
+            <s-section>
+              <s-text type="strong">Form Submissions</s-text>
+              <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
 
-                    {filteredSubmissions.length === 0 ? (
-                      <EmptyState
-                        heading="No submissions found"
-                        image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                      >
-                        <p>No submissions match the selected filter.</p>
-                      </EmptyState>
-                    ) : (
-                        <IndexTable
-                          resourceName={{ singular: 'submission', plural: 'submissions' }}
-                          itemCount={filteredSubmissions.length}
-                          headings={[
-                            { title: 'Customer Details' },
-                            { title: 'Status' },
-                            { title: 'Date' },
-                            { title: 'Actions' }
-                          ]}
-                          selectable={false}
-                        >
-                          {filteredSubmissions.map(
-                            (sub, index) => {
-                              const data = JSON.parse(sub.data);
-                              return (
-                                <IndexTable.Row id={sub.id} key={sub.id} position={index}>
-                                  <IndexTable.Cell>
-                                    <div style={{ whiteSpace: 'pre-wrap' }}>
-                                      {Object.entries(data).map(([k, v]) => (
-                                        <div key={k}>
-                                          <strong>{k}:</strong>{" "}
-                                          {typeof v === "object" && v !== null ? (
-                                            v._type === "file" ? (
-                                              (() => {
-                                                const isImage = v.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                                                const isPdf = v.name?.match(/\.pdf$/i);
+              {filteredSubmissions.length === 0 ? (
+                <EmptyState
+                  heading="No submissions found"
+                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                >
+                  <p>No submissions match the selected filter.</p>
+                </EmptyState>
+              ) : (
+                  <s-table>
+                    <s-table-header-row>
+                      <s-table-header>Customer Details</s-table-header>
+                      <s-table-header>Status</s-table-header>
+                      <s-table-header>Date</s-table-header>
+                      <s-table-header>Actions</s-table-header>
+                    </s-table-header-row>
+                    <s-table-body>
+                      {filteredSubmissions.map(
+                        (sub, index) => {
+                          const data = JSON.parse(sub.data);
+                          return (
+                            <s-table-row key={sub.id}>
+                              <s-table-cell>
+                                <div style={{ whiteSpace: 'pre-wrap' }}>
+                                  {Object.entries(data).map(([k, v]) => (
+                                    <div key={k}>
+                                      <strong>{k}:</strong>{" "}
+                                      {typeof v === "object" && v !== null ? (
+                                        v._type === "file" ? (
+                                          (() => {
+                                            const isImage = v.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                                            const isPdf = v.name?.match(/\.pdf$/i);
 
-                                                if (isImage) {
-                                                  return (
-                                                    <a href={v.content} download={v.name} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100px' }}>
-                                                      <img
-                                                        src={v.content}
-                                                        alt={v.name}
-                                                        style={{
-                                                          width: '100px',
-                                                          height: '100px',
-                                                          objectFit: 'cover',
-                                                          border: '1px solid #ccc',
-                                                          borderRadius: '4px'
-                                                        }}
-                                                      />
-                                                    </a>
-                                                  );
-                                                } else if (isPdf) {
-                                                  return (
-                                                    <a href={v.content} download={v.name} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                      <div style={{
-                                                        width: '100px',
-                                                        height: '100px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        border: '1px solid #ccc',
-                                                        borderRadius: '4px',
-                                                        backgroundColor: '#f4f6f8'
-                                                      }}>
-                                                        <span style={{ fontSize: '24px', color: '#d82c2c' }}>PDF</span>
-                                                      </div>
-                                                    </a>
-                                                  );
-                                                }
-                                                return (
-                                                  <a href={v.content} download={v.name} target="_blank" rel="noopener noreferrer">
-                                                    Download {v.name}
-                                                  </a>
-                                                );
-                                              })()
-                                            ) : JSON.stringify(v)
-                                          ) : v}
-                                        </div>
-                                      ))}
+                                            if (isImage) {
+                                              return (
+                                                <a href={v.content} download={v.name} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100px' }}>
+                                                  <img
+                                                    src={v.content}
+                                                    alt={v.name}
+                                                    style={{
+                                                      width: '100px',
+                                                      height: '100px',
+                                                      objectFit: 'cover',
+                                                      border: '1px solid #ccc',
+                                                      borderRadius: '4px'
+                                                    }}
+                                                  />
+                                                </a>
+                                              );
+                                            } else if (isPdf) {
+                                              return (
+                                                <a href={v.content} download={v.name} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                  <div style={{
+                                                    width: '100px',
+                                                    height: '100px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    border: '1px solid #ccc',
+                                                    borderRadius: '4px',
+                                                    backgroundColor: '#f4f6f8'
+                                                  }}>
+                                                    <span style={{ fontSize: '24px', color: '#d82c2c' }}>PDF</span>
+                                                  </div>
+                                                </a>
+                                              );
+                                            }
+                                            return (
+                                              <a href={v.content} download={v.name} target="_blank" rel="noopener noreferrer">
+                                                Download {v.name}
+                                              </a>
+                                            );
+                                          })()
+                                        ) : JSON.stringify(v)
+                                      ) : v}
                                     </div>
-                                  </IndexTable.Cell>
-                                  <IndexTable.Cell>
-                                    {sub.status === 'APPROVED' ? (
-                                      <Badge tone="success">Approved</Badge>
-                                    ) : sub.status === 'REJECTED' ? (
-                                      <Badge tone="critical">Rejected</Badge>
-                                    ) : (
-                                      <Badge tone="attention">Pending</Badge>
+                                  ))}
+                                </div>
+                              </s-table-cell>
+                              <s-table-cell>
+                                {sub.status === 'APPROVED' ? (
+                                  <s-badge tone="success">Approved</s-badge>
+                                ) : sub.status === 'REJECTED' ? (
+                                  <s-badge tone="critical">Rejected</s-badge>
+                                ) : (
+                                  <s-badge tone="attention">Pending</s-badge>
+                                )}
+                              </s-table-cell>
+                              <s-table-cell>{formatDate(sub.createdAt)}</s-table-cell>
+                              <s-table-cell>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  {sub.status !== 'APPROVED' && (
+                                      <s-button
+                                        size="slim"
+                                        variant="primary"
+                                        onClick={() => submit({ intent: 'approve', submissionId: sub.id }, { method: 'post' })}
+                                      >
+                                        Approve
+                                      </s-button>
                                     )}
-                                  </IndexTable.Cell>
-                                  <IndexTable.Cell>{formatDate(sub.createdAt)}</IndexTable.Cell>
-                                  <IndexTable.Cell>
-                                    <ButtonGroup>
-                                      {sub.status !== 'APPROVED' && (
-                                        <Button
-                                          size="slim"
-                                          variant="primary"
-                                          onClick={() => submit({ intent: 'approve', submissionId: sub.id }, { method: 'post' })}
-                                        >
-                                          Approve
-                                        </Button>
-                                      )}
-                                      {sub.status !== 'REJECTED' && (
-                                        <Button
-                                          size="slim"
-                                          tone="critical"
-                                          onClick={() => submit({ intent: 'reject', submissionId: sub.id }, { method: 'post' })}
-                                        >
-                                          Reject
-                                        </Button>
-                                      )}
-                                    </ButtonGroup>
-                                  </IndexTable.Cell>
-                                </IndexTable.Row>
-                              )
-                            }
-                          )}
-                        </IndexTable>
-                    )}
-                  </BlockStack>
-                </Card>
-              </BlockStack>
-            )}
-          </BlockStack>
-        </Layout.Section>
-      </Layout>
+                                  {sub.status !== 'REJECTED' && (
+                                      <s-button
+                                        size="slim"
+                                        tone="critical"
+                                        onClick={() => submit({ intent: 'reject', submissionId: sub.id }, { method: 'post' })}
+                                      >
+                                        Reject
+                                      </s-button>
+                                    )}
+                                </div>
+                              </s-table-cell>
+                            </s-table-row>
+                          )
+                        }
+                      )}
+                    </s-table-body>
+                  </s-table>
+              )}
+            </s-section>
+          </s-box>
+        )}
+      </s-box>
     </s-page>
   );
 }
