@@ -1,10 +1,6 @@
 
   (function () {
-    // Need to get these from the DOM or passed in some other way since we can't use liquid block.id or block.settings directly in .js asset
-    // We will look for a data attribute on the script tag or expect the container to exist with a specific class/id pattern if possible,
-    // OR we wrap this in a function that takes arguments and call it from Liquid.
-    
-    // Better approach: Define a global function or class, and initialize it from the liquid file.
+
     
     window.GDCustomForm = {
         init: function(blockId, formId) {
@@ -34,14 +30,17 @@
             
             const settings = form.settings ? JSON.parse(form.settings) : {};
             
-            // Header
+
             const headerDiv = document.createElement('div');
             headerDiv.className = 'gd-form-header';
+            headerDiv.style.textAlign = 'center';
+            headerDiv.style.padding = '0 10px';
             
-            if (settings.title) {
+            if (form.title) {
                 const h2 = document.createElement('h2');
                 h2.className = 'gd-form-title';
-                h2.innerText = settings.title;
+                h2.innerText = form.title;
+                h2.style.marginBottom = '10px';
                 headerDiv.appendChild(h2);
             }
             
@@ -56,34 +55,39 @@
             const formEl = document.createElement('form');
             const formContainer = document.createElement('div');
             formContainer.className = 'gd-form-container';
+            formContainer.style.display = 'flex';
+            formContainer.style.flexWrap = 'wrap';
+            formContainer.style.margin = '0 -10px';
 
             const submitBtn = document.createElement('button');
             submitBtn.type = 'submit';
             submitBtn.className = 'gd-form-submit';
             submitBtn.innerText = settings.submitText || 'Submit';
             
-            // Submit Button Styles
+
             const submitNormalBg = settings.submitColor || '#000';
-            const submitHoverBg = settings.submitHoverColor || '#333';
-            const submitActiveBg = settings.submitActiveColor || '#555';
+
             const submitTextCol = settings.submitTextColor || '#fff';
 
             submitBtn.style.backgroundColor = submitNormalBg;
             submitBtn.style.color = submitTextCol;
+            submitBtn.style.width = '100%';
             
-            // Submit Button Interactions
-            submitBtn.onmouseover = () => { if(!submitBtn.disabled) submitBtn.style.backgroundColor = submitHoverBg; };
-            submitBtn.onmouseout = () => { if(!submitBtn.disabled) submitBtn.style.backgroundColor = submitNormalBg; };
-            submitBtn.onmousedown = () => { if(!submitBtn.disabled) submitBtn.style.backgroundColor = submitActiveBg; };
-            submitBtn.onmouseup = () => { if(!submitBtn.disabled) submitBtn.style.backgroundColor = submitHoverBg; };
+
+
 
             
             formEl.appendChild(submitBtn);
+
+
 
             form.fields.forEach((field) => {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'gd-form-field-wrapper';
                 wrapper.style.width = (field.width === '50') ? '50%' : '100%';
+                wrapper.style.padding = '0 10px';
+                wrapper.style.boxSizing = 'border-box';
+                wrapper.style.marginBottom = '15px';
 
                 if (field.type === 'header') {
                     const hDiv = document.createElement('div');
@@ -97,12 +101,14 @@
                         const label = document.createElement('label');
                         label.className = 'gd-form-label';
                         label.innerText = field.label;
-                        label.style.color = settings.labelColor || '#000'; // Label Color
+                        label.style.color = settings.labelColor || '#000';
+                        label.style.textAlign = 'left';
+                        label.style.display = 'block';
                         
                         if (field.required) {
                             const span = document.createElement('span');
                             span.innerText = ' *';
-                            span.style.color = settings.requiredColor || 'red'; // Required Color
+                            span.style.color = settings.requiredColor || 'red';
                             label.appendChild(span);
                         }
                         wrapper.appendChild(label);
@@ -116,7 +122,7 @@
                     };
 
                     if (field.type === 'textarea') {
-                    // ... (keep usage of common input styles)
+
                     input = document.createElement('textarea');
                     input.className = 'gd-form-input';
                     input.rows = 4;
@@ -124,7 +130,7 @@
                     input.className = 'gd-form-input';
                     if (field.required) input.required = true;
                     commonInputStyles(input);
-                    // Initial placeholder color logic
+
                     const placeholderColor = settings.placeholderColor || '#999';
                     const textColor = settings.color || '#000'; 
                     
@@ -137,20 +143,20 @@
                     const defaultOpt = document.createElement('option');
                     defaultOpt.text = field.placeholder || 'Choose option...';
                     defaultOpt.value = '';
-                    // defaultOpt.disabled = true; // Removed to allow selection
+
                     defaultOpt.selected = true;
-                    // defaultOpt shouldn't be selectable, but if shown, it can inherit or be grey
+
                     input.appendChild(defaultOpt);
 
                     field.options.forEach((opt) => {
                         const o = document.createElement('option');
                         o.text = opt;
                         o.value = opt;
-                        o.style.color = textColor; // Force normal color for options
+                        o.style.color = textColor;
                         input.appendChild(o);
                     });
                     } else if (field.type === 'radio') {
-                         // ... (radio logic)
+
                         const radioGroup = document.createElement('div');
                         radioGroup.className = 'gd-form-radio-group';
                         radioGroup.style.padding = '5px 0';
@@ -165,7 +171,7 @@
                             rInput.type = 'radio';
                             rInput.name = field.id;
                             rInput.value = opt;
-                            // Radio required logic handled by browser if name matches
+
                             if(field.required) rInput.required = true;
                             
                             const rLabel = document.createElement('span');
@@ -192,7 +198,7 @@
 
                                 const cbInput = document.createElement('input');
                                 cbInput.type = 'checkbox';
-                                cbInput.name = field.id; // Using same name allows generic selection
+                                cbInput.name = field.id;
                                 cbInput.value = opt;
                                 
                                 const cbLabel = document.createElement('span');
@@ -206,13 +212,13 @@
                              });
                              wrapper.appendChild(cbGroup);
                         } else {
-                            // Single checkbox logic
+
                             const cbWrapper = document.createElement('div');
                             cbWrapper.className = 'gd-form-checkbox-wrapper';
                             
                             input = document.createElement('input');
                             input.type = 'checkbox';
-                            input.name = field.id; // Ensure name is set here too
+                            input.name = field.id;
                             
                             const cbLabel = document.createElement('label');
                             cbLabel.innerText = field.placeholder || field.label; 
@@ -230,7 +236,7 @@
                             wrapper.appendChild(cbWrapper);
                         }
                     } else {
-                    // Handles text, email, number, date, file
+
                     input = document.createElement('input');
                     input.type = field.type;
                     input.className = 'gd-form-input';
@@ -251,8 +257,27 @@
                 formContainer.appendChild(wrapper);
             });
             
+            const footerDiv = document.createElement('div');
+            footerDiv.className = 'gd-form-footer';
+            footerDiv.style.textAlign = 'center';
+            footerDiv.style.width = '75%';
+            footerDiv.style.margin = '5px auto';
+            footerDiv.style.padding = '0 10px';
+
             formEl.appendChild(formContainer);
-            formEl.appendChild(submitBtn); // Moving submit button to end
+            footerDiv.appendChild(submitBtn);
+
+            if (settings.disclaimer) {
+                const disclaimer = document.createElement('p');
+                disclaimer.innerText = settings.disclaimer;
+                disclaimer.className = 'gd-form-disclaimer';
+                disclaimer.style.marginTop = '10px';
+                disclaimer.style.fontSize = '12px';
+                disclaimer.style.color = '#666';
+                footerDiv.appendChild(disclaimer);
+            }
+
+            formEl.appendChild(footerDiv);
 
             formEl.onsubmit = async (e) => {
                 e.preventDefault();
@@ -265,29 +290,28 @@
                 const processField = async (f) => {
                 if (f.type === 'header') return;
                 
-                // For radio/checkbox groups, we might have multiple elements or no single 'el' by ID if we used name
-                // The previous logic used formEl.elements[f.id] which works if name=f.id
+
                 
                 const el = formEl.elements[f.id];
-                 // formEl.elements[name] returns a RadioNodeList/NodeList if multiple, or Element if one.
+
                 
                 if (!el) return;
 
                 if (f.type === 'checkbox') {
                     if (el instanceof NodeList || (el instanceof RadioNodeList && el.length > 1)) {
-                         // Multiple checkboxes with same name
+
                          const checked = [];
                          el.forEach(node => { if (node.checked) checked.push(node.value); });
                          formData[f.label] = checked.join(', ');
                     } else if (f.options && f.options.length > 0) {
-                         // Single checkbox in an option list (1 option case)
+
                          formData[f.label] = el.checked ? el.value : '';
                     } else {
-                         // Legacy single boolean checkbox
+
                          formData[f.label] = el.checked ? 'Yes' : 'No';
                     }
                 } else if (f.type === 'radio') {
-                     // RadioNodeList value is the checked one
+
                      formData[f.label] = el.value;
                 } else if (f.type === 'file') {
                     if (el.files && el.files[0]) {
@@ -303,7 +327,7 @@
                         try {
                             const file = el.files[0];
                             const base64 = await getBase64(file);
-                            // Store as an object we can identify later
+
                             formData[f.label] = {
                                 _type: 'file',
                                 name: file.name,

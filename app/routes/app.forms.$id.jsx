@@ -268,7 +268,8 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
     marginBottom: '5px',
     fontWeight: '500',
     color: styleSettings?.labelColor || '#000',
-    pointerEvents: 'none'
+    pointerEvents: 'none',
+    textAlign: 'left'
   };
 
   const inputStyle = {
@@ -581,10 +582,9 @@ export default function FormEditor() {
             <Card>
               <BlockStack gap="400">
                 <Text variant="headingMd" as="h2">Form Settings</Text>
-                <TextField label="Internal Form Title" value={title} onChange={setTitle} autoComplete="off" helpText="Only visible in the app admin." />
+                <TextField label="Form Title" value={title} onChange={setTitle} autoComplete="off" />
+                <TextField label="Content" value={settings.subtitle} onChange={(val) => setSettings({ ...settings, subtitle: val })} autoComplete="off" multiline={3} />
                 <Divider />
-                <TextField label="Page Title (Frontend)" value={settings.title || title} onChange={(val) => setSettings({ ...settings, title: val })} autoComplete="off" />
-                <TextField label="Subtitle / Description" value={settings.subtitle} onChange={(val) => setSettings({ ...settings, subtitle: val })} autoComplete="off" multiline={3} />
                 <InlineStack gap="400">
                   <div style={{ flex: 1 }}>
                     <TextField label="Submit Button Text" value={settings.submitText} onChange={(val) => setSettings({ ...settings, submitText: val })} autoComplete="off" />
@@ -593,6 +593,7 @@ export default function FormEditor() {
                     <TextField label="Success Message" value={settings.successMessage} onChange={(val) => setSettings({ ...settings, successMessage: val })} autoComplete="off" />
                   </div>
                 </InlineStack>
+                <TextField label="Consent Disclaimer" value={settings.disclaimer} onChange={(val) => setSettings({ ...settings, disclaimer: val })} autoComplete="off" multiline={3} />
               </BlockStack>
             </Card>
 
@@ -681,23 +682,6 @@ export default function FormEditor() {
                         </div>
                       </div>
                     </InlineStack>
-                    <InlineStack gap="400" wrap>
-                      <div style={{ flex: 1, minWidth: '150px' }}>
-                        <Text variant="bodySm">Hover Background</Text>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                          <input type="color" value={settings.submitHoverColor} onChange={(e) => setSettings({ ...settings, submitHoverColor: e.target.value })} style={{ height: '30px', width: '30px', border: 'none', padding: 0, cursor: 'pointer' }} />
-                          <TextField value={settings.submitHoverColor} onChange={(val) => setSettings({ ...settings, submitHoverColor: val })} autoComplete="off" />
-                        </div>
-                      </div>
-                      <div style={{ flex: 1, minWidth: '150px' }}>
-                        <Text variant="bodySm">Active Background</Text>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                          <input type="color" value={settings.submitActiveColor} onChange={(e) => setSettings({ ...settings, submitActiveColor: e.target.value })} style={{ height: '30px', width: '30px', border: 'none', padding: 0, cursor: 'pointer' }} />
-                          <TextField value={settings.submitActiveColor} onChange={(val) => setSettings({ ...settings, submitActiveColor: val })} autoComplete="off" />
-                        </div>
-                      </div>
-                    </InlineStack>
-
                   </BlockStack>
                 </Collapsible>
               </BlockStack>
@@ -711,9 +695,10 @@ export default function FormEditor() {
                 </InlineStack>
 
                 <Box padding="600" background="bg-surface-secondary" borderRadius="200" borderWidth="1" borderColor="border">
-                  <div style={{ maxWidth: '100%', margin: '0 auto' }}>
-                    {settings.title && <h2 style={{ fontSize: '24px', marginBottom: '10px' }}>{settings.title}</h2>}
-                    {settings.subtitle && <p style={{ marginBottom: '20px', color: '#666' }}>{settings.subtitle}</p>}
+                  <div style={{ maxWidth: '100%', margin: '0 auto', textAlign: 'center', padding: '0 10px' }}>
+                    {title && <h2 style={{ fontSize: '20px', marginBottom: '10px', fontWeight: 'bold' }}>{title}</h2>}
+
+                    {settings.subtitle && <p style={{ maxWidth: '90%', margin: '0 auto 20px auto', marginBottom: '20px', color: '#666' }}>{settings.subtitle}</p>}
 
                     <DndContext
                       sensors={sensors}
@@ -745,14 +730,18 @@ export default function FormEditor() {
                       </div>
                     )}
 
-                    <div style={{ marginTop: '20px', padding: '0 10px' }}>
-                      <button disabled style={{
-                        background: settings.submitColor || '#000',
-                        color: settings.submitTextColor || '#fff',
-                        padding: '10px 25px', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: 0.7
-                      }}>
-                        {settings.submitText}
-                      </button>
+                    <div style={{ marginTop: '15px', padding: '0 10px' }}>
+                      <div style={{ margin: '5px auto', width: '75%', padding: '0 10px', textAlign: 'center' }}>
+                        <button disabled style={{
+                          background: settings.submitColor || '#000',
+                          color: settings.submitTextColor || '#fff',
+                          padding: '10px 25px', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: 0.7,
+                          width: '100%'
+                        }}>
+                          {settings.submitText}
+                        </button>
+                        {settings.disclaimer && <p style={{ marginTop: '10px', fontSize: '12px', color: '#666' }}>{settings.disclaimer}</p>}
+                      </div>
                     </div>
                   </div>
                 </Box>
