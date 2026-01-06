@@ -91,7 +91,9 @@
                     hDiv.innerHTML = `<h3>${field.label}</h3>`;
                     wrapper.appendChild(hDiv);
                 } else {
-                    if (field.type !== 'checkbox') {
+                    const hasOptions = field.type === 'checkbox' && field.options && field.options.length > 0;
+
+                    if (field.type !== 'checkbox' || hasOptions) {
                         const label = document.createElement('label');
                         label.className = 'gd-form-label';
                         label.innerText = field.label;
@@ -114,26 +116,41 @@
                     };
 
                     if (field.type === 'textarea') {
+                    // ... (keep usage of common input styles)
                     input = document.createElement('textarea');
                     input.className = 'gd-form-input';
                     input.rows = 4;
                     commonInputStyles(input);
-                    } else if (field.type === 'select') {
-                    input = document.createElement('select');
                     input.className = 'gd-form-input';
+                    if (field.required) input.required = true;
                     commonInputStyles(input);
+                    // Initial placeholder color logic
+                    const placeholderColor = settings.placeholderColor || '#999';
+                    const textColor = settings.color || '#000'; 
+                    
+                    input.style.color = placeholderColor;
+
+                    input.addEventListener('change', function() {
+                        this.style.color = this.value === '' ? placeholderColor : textColor;
+                    });
+
                     const defaultOpt = document.createElement('option');
-                    defaultOpt.text = '- Select -';
+                    defaultOpt.text = field.placeholder || 'Choose option...';
                     defaultOpt.value = '';
+                    // defaultOpt.disabled = true; // Removed to allow selection
+                    defaultOpt.selected = true;
+                    // defaultOpt shouldn't be selectable, but if shown, it can inherit or be grey
                     input.appendChild(defaultOpt);
 
                     field.options.forEach((opt) => {
                         const o = document.createElement('option');
                         o.text = opt;
                         o.value = opt;
+                        o.style.color = textColor; // Force normal color for options
                         input.appendChild(o);
                     });
                     } else if (field.type === 'radio') {
+                         // ... (radio logic)
                         const radioGroup = document.createElement('div');
                         radioGroup.className = 'gd-form-radio-group';
                         radioGroup.style.padding = '5px 0';
@@ -162,26 +179,56 @@
                         });
                         wrapper.appendChild(radioGroup);
                     } else if (field.type === 'checkbox') {
-                    const cbWrapper = document.createElement('div');
-                    cbWrapper.className = 'gd-form-checkbox-wrapper';
-                    
-                    input = document.createElement('input');
-                    input.type = 'checkbox';
-                    
-                    const cbLabel = document.createElement('label');
-                    cbLabel.innerText = field.placeholder || field.label; 
-                    cbLabel.style.color = settings.labelColor || '#000';
+                        if (field.options && field.options.length > 0) {
+                             const cbGroup = document.createElement('div');
+                             cbGroup.className = 'gd-form-checkbox-group';
+                             cbGroup.style.padding = '5px 0';
 
-                    if(field.required) {
-                        const span = document.createElement('span');
-                        span.innerText = ' *';
-                        span.style.color = settings.requiredColor || 'red';
-                        cbLabel.appendChild(span);
-                    }
+                             field.options.forEach(opt => {
+                                const cbWrapper = document.createElement('div');
+                                cbWrapper.style.display = 'flex';
+                                cbWrapper.style.alignItems = 'center';
+                                cbWrapper.style.marginBottom = '5px';
 
-                    cbWrapper.appendChild(input);
-                    cbWrapper.appendChild(cbLabel);
-                    wrapper.appendChild(cbWrapper);
+                                const cbInput = document.createElement('input');
+                                cbInput.type = 'checkbox';
+                                cbInput.name = field.id; // Using same name allows generic selection
+                                cbInput.value = opt;
+                                
+                                const cbLabel = document.createElement('span');
+                                cbLabel.innerText = opt;
+                                cbLabel.style.marginLeft = '8px';
+                                cbLabel.style.color = settings.labelColor || '#000';
+
+                                cbWrapper.appendChild(cbInput);
+                                cbWrapper.appendChild(cbLabel);
+                                cbGroup.appendChild(cbWrapper);
+                             });
+                             wrapper.appendChild(cbGroup);
+                        } else {
+                            // Single checkbox logic
+                            const cbWrapper = document.createElement('div');
+                            cbWrapper.className = 'gd-form-checkbox-wrapper';
+                            
+                            input = document.createElement('input');
+                            input.type = 'checkbox';
+                            input.name = field.id; // Ensure name is set here too
+                            
+                            const cbLabel = document.createElement('label');
+                            cbLabel.innerText = field.placeholder || field.label; 
+                            cbLabel.style.color = settings.labelColor || '#000';
+
+                            if(field.required) {
+                                const span = document.createElement('span');
+                                span.innerText = ' *';
+                                span.style.color = settings.requiredColor || 'red';
+                                cbLabel.appendChild(span);
+                            }
+
+                            cbWrapper.appendChild(input);
+                            cbWrapper.appendChild(cbLabel);
+                            wrapper.appendChild(cbWrapper);
+                        }
                     } else {
                     // Handles text, email, number, date, file
                     input = document.createElement('input');
@@ -218,11 +265,30 @@
                 const processField = async (f) => {
                 if (f.type === 'header') return;
                 
+                // For radio/checkbox groups, we might have multiple elements or no single 'el' by ID if we used name
+                // The previous logic used formEl.elements[f.id] which works if name=f.id
+                
                 const el = formEl.elements[f.id];
+                 // formEl.elements[name] returns a RadioNodeList/NodeList if multiple, or Element if one.
+                
                 if (!el) return;
 
                 if (f.type === 'checkbox') {
-                    formData[f.label] = el.checked ? 'Yes' : 'No';
+                    if (el instanceof NodeList || (el instanceof RadioNodeList && el.length > 1)) {
+                         // Multiple checkboxes with same name
+                         const checked = [];
+                         el.forEach(node => { if (node.checked) checked.push(node.value); });
+                         formData[f.label] = checked.join(', ');
+                    } else if (f.options && f.options.length > 0) {
+                         // Single checkbox in an option list (1 option case)
+                         formData[f.label] = el.checked ? el.value : '';
+                    } else {
+                         // Legacy single boolean checkbox
+                         formData[f.label] = el.checked ? 'Yes' : 'No';
+                    }
+                } else if (f.type === 'radio') {
+                     // RadioNodeList value is the checked one
+                     formData[f.label] = el.value;
                 } else if (f.type === 'file') {
                     if (el.files && el.files[0]) {
                         const getBase64 = (file) => {

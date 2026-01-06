@@ -1,7 +1,7 @@
 import { useLoaderData, useSubmit, useNavigation, Form as RemixForm, redirect, useRouteError, useActionData, useNavigate } from "react-router";
 import { Page, Layout, Card, TextField, Button, BlockStack, Box, Text, Select, Checkbox, InlineStack, Banner, Divider, Badge, Icon, Tooltip, IndexTable, EmptyState, ColorPicker, RangeSlider, Collapsible, ButtonGroup, Tabs } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { DeleteIcon, DuplicateIcon, ClipboardIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import { DeleteIcon, DuplicateIcon, ClipboardIcon, ChevronDownIcon, ChevronUpIcon, DragHandleIcon } from "@shopify/polaris-icons";
 import { useState, useEffect, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import {
@@ -22,7 +22,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import db from "../db.server";
 
-// Helper to convert HSB to Hex (Polaris ColorPicker uses HSB)
+// Helper to convert HSB to Hex
 function hsbToHex({ hue, saturation, brightness }) {
   const chroma = (brightness * saturation);
   const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
@@ -42,11 +42,11 @@ function hsbToHex({ hue, saturation, brightness }) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// Helper: Hex to HSB (for initializing ColorPicker) - Simplified approximation or use a library
+// Helper: Hex to HSB
 function hexToHsb(hex) {
   // Basic implementation for brevity, relying on user interaction to set precise colors
   // In a real app, use a robust library like 'tinycolor2' or 'colord'
-  return { hue: 0, saturation: 0, brightness: 1 }; // Default dummy
+  return { hue: 0, saturation: 0, brightness: 1 };
 }
 
 export const loader = async ({ request, params }) => {
@@ -101,18 +101,15 @@ export const action = async ({ request, params }) => {
         return { status: "success", message: "Submission rejected" };
       }
 
-      // Approve Logic
       const submission = await db.formSubmission.findUnique({
         where: { id: parseInt(submissionId) }
       });
       const data = JSON.parse(submission.data);
 
-      // Find email and name case-insensitively
       const keys = Object.keys(data);
       const emailKey = keys.find(k => k.toLowerCase().includes("email"));
       const firstNameKey = keys.find(k => k.toLowerCase().includes("first"));
       const lastNameKey = keys.find(k => k.toLowerCase().includes("last"));
-      // Fallback for name if "First Name" not found
       const nameKey = keys.find(k => k.toLowerCase() === "name" || k.toLowerCase().includes("name"));
 
       const email = emailKey ? data[emailKey] : null;
@@ -123,7 +120,6 @@ export const action = async ({ request, params }) => {
         return { status: "error", message: "Could not find an email address in the submission data." };
       }
 
-      // Create Customer in Shopify
       const response = await admin.graphql(
         `#graphql
             mutation customerCreate($input: CustomerInput!) {
@@ -154,9 +150,7 @@ export const action = async ({ request, params }) => {
       const userErrors = responseJson.data?.customerCreate?.userErrors;
 
       if (userErrors && userErrors.length > 0) {
-        // Check if error is "Customer already exists" ("taken")
         if (userErrors[0].message.includes("taken")) {
-          // Fetch existing customer ID and Tags
           const customerQuery = await admin.graphql(
             `#graphql
                query getCustomer($query: String!) {
@@ -194,8 +188,8 @@ export const action = async ({ request, params }) => {
               if (updateJson.data?.customerUpdate?.userErrors?.length > 0) {
                 return { status: "error", message: "Failed to update existing customer tags: " + updateJson.data.customerUpdate.userErrors[0].message };
               }
+
             }
-            // Proceed to approve (fall through)
           } else {
             return { status: "error", message: "Email taken but could not find existing customer in Shopify." };
           }
@@ -247,7 +241,6 @@ export const action = async ({ request, params }) => {
   }
 };
 
-// Sortable Field Component
 function SortableField({ field, isActive, onClick, styleSettings }) {
   const {
     attributes,
@@ -255,15 +248,19 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
     setNodeRef,
     transform,
     transition,
+    isDragging,
   } = useSortable({ id: field.id });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
     width: field.width === '50' ? '50%' : '100%',
     padding: '0 10px',
     marginBottom: '15px',
-    cursor: 'grab',
+    cursor: 'default',
+    zIndex: isDragging ? 2 : 1,
+    position: 'relative',
+    opacity: isDragging ? 0.8 : 1,
   };
 
   const labelStyle = {
@@ -279,8 +276,7 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
     padding: `${styleSettings?.fieldPadding || 8}px`,
     border: `1px solid ${styleSettings?.borderColor || '#ddd'}`,
     borderRadius: `${styleSettings?.borderRadius || 4}px`,
-    pointerEvents: 'none',
-    color: styleSettings?.placeholderColor ? '#000' : 'inherit'
+    borderRadius: `${styleSettings?.borderRadius || 4}px`,
   };
 
   return (
@@ -288,17 +284,33 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
       onClick={onClick}
     >
       <div style={{
         border: isActive ? '2px solid #5c6ac4' : '1px dashed #bbb',
-        padding: '10px',
+        padding: '10px 10px 10px 32px',
         borderRadius: '4px',
         transition: 'border 0.2s',
         background: isActive ? 'rgba(92, 106, 196, 0.05)' : '#fff',
-        position: 'relative'
+        position: 'relative',
+        boxShadow: isDragging ? '0 5px 15px rgba(0,0,0,0.15)' : 'none',
       }}>
+        <div 
+          {...listeners} 
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '4px',
+            transform: 'translateY(-50%)',
+            cursor: 'grab',
+            padding: '4px',
+            color: '#999',
+            touchAction: 'none'
+          }}
+        >
+          <Icon source={DragHandleIcon} tone="subdued" />
+        </div>
+
         <div style={{
           position: 'absolute',
           top: '-8px',
@@ -320,49 +332,64 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
         ) : (
           <>
             <label style={labelStyle}>
-              {field.label} {field.required && <span style={{ color: styleSettings?.requiredColor || 'red' }}>*</span>}
+              {field.label} {field.required && <span style={{ color: styleSettings?.requiredColor || 'green' }}>*</span>}
             </label>
             {field.type === 'textarea' ? (
               <textarea
-                disabled
                 placeholder={field.placeholder}
                 style={{ ...inputStyle, minHeight: '80px' }}
               />
             ) : field.type === 'select' ? (
-              <select disabled style={inputStyle}>
-                <option>Select...</option>
-                {field.options?.map(opt => <option key={opt}>{opt}</option>)}
+              <select 
+                required={field.required}
+                style={{ ...inputStyle, color: styleSettings?.placeholderColor || '#999' }}
+                onChange={(e) => {
+                  e.target.style.color = e.target.value === '' || e.target.value === (field.placeholder || "Choose option...") 
+                    ? (styleSettings?.placeholderColor || '#999') 
+                    : '#000';
+                }}
+              >
+                <option value="" selected>{field.placeholder || "Choose option..."}</option>
+                {field.options?.map(opt => <option key={opt} value={opt} style={{ color: '#000' }}>{opt}</option>)}
               </select>
-                ) : field.type === 'radio' ? (
-                  <div style={{ pointerEvents: 'none' }}>
-                    {field.options?.length > 0 ? field.options.map((opt, i) => (
-                      <div key={i} style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input type="radio" disabled />
-                        <span style={{ color: styleSettings?.labelColor || '#000' }}>{opt}</span>
-                      </div>
-                    )) : <Text tone="subdued">No options defined</Text>}
+            ) : field.type === 'radio' ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
+                {field.options?.length > 0 ? field.options.map((opt, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input type="radio" name={field.id} />
+                    <span style={{ color: styleSettings?.labelColor || '#000' }}>{opt}</span>
                   </div>
-            ) : field.type === 'checkbox' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
-                <input type="checkbox" disabled />
-                <span style={{ color: styleSettings?.labelColor }}>{field.placeholder || "Checkbox text"}</span>
+                )) : <Text tone="subdued">No options defined</Text>}
               </div>
-                    ) : field.type === 'file' ? (
-                      <input
-                        type="file"
-                        disabled
-                        style={{ ...inputStyle, padding: '4px' }}
-                      />
-                    ) : field.type === 'date' ? (
-                      <input
-                        type="date"
-                        disabled
-                        style={{ ...inputStyle }}
-                      />
+            ) : field.type === 'checkbox' ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
+                {field.options?.length > 0 ? (
+                  field.options.map((opt, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input type="checkbox" />
+                      <span style={{ color: styleSettings?.labelColor }}>{opt}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input type="checkbox" />
+                    <span style={{ color: styleSettings?.labelColor }}>{field.placeholder || "Checkbox text"}</span>
+                  </div>
+                )}
+              </div>
+            ) : field.type === 'file' ? (
+              <input
+                type="file"
+                style={{ ...inputStyle, padding: '4px' }}
+              />
+            ) : field.type === 'date' ? (
+              <input
+                type="date"
+                style={{ ...inputStyle }}
+              />
             ) : (
               <input
                 type={field.type}
-                disabled
                 placeholder={field.placeholder}
                 style={{ ...inputStyle }}
               />
@@ -425,13 +452,13 @@ export default function FormEditor() {
 
   const filteredSubmissions = form?.submissions?.filter((sub) => {
     switch (selectedTab) {
-      case 1: // Pending
+      case 1:
         return !sub.status || sub.status === 'PENDING';
-      case 2: // Approved
+      case 2:
         return sub.status === 'APPROVED';
-      case 3: // Rejected
+      case 3:
         return sub.status === 'REJECTED';
-      default: // All
+      default:
         return true;
     }
   }) || [];
@@ -472,7 +499,7 @@ export default function FormEditor() {
       type,
       label: type === "header" ? "New Section" : "New Field",
       required: false,
-      width: "100", // 50 or 100
+      width: "100",
       placeholder: "",
       options: [],
     };
@@ -684,7 +711,6 @@ export default function FormEditor() {
                 </InlineStack>
 
                 <Box padding="600" background="bg-surface-secondary" borderRadius="200" borderWidth="1" borderColor="border">
-                  {/* Mock Form PREVIEW */}
                   <div style={{ maxWidth: '100%', margin: '0 auto' }}>
                     {settings.title && <h2 style={{ fontSize: '24px', marginBottom: '10px' }}>{settings.title}</h2>}
                     {settings.subtitle && <p style={{ marginBottom: '20px', color: '#666' }}>{settings.subtitle}</p>}
@@ -747,7 +773,7 @@ export default function FormEditor() {
                       key={ft.value}
                       onClick={() => addField(ft.value)}
                       size="slim"
-                      variant={ft.value === 'header' ? 'secondary' : 'primary'} // Visual distinction
+                      variant={ft.value === 'header' ? 'secondary' : 'primary'}
                     >
                       {ft.label}
                     </s-button>
@@ -776,7 +802,7 @@ export default function FormEditor() {
                           autoComplete="off"
                         />
 
-                        {field.type !== 'header' && field.type !== 'checkbox' && (
+                        {field.type !== 'header' && field.type !== 'checkbox' && field.type !== 'radio' && (
                           <TextField
                             label="Placeholder"
                             value={field.placeholder}
@@ -805,11 +831,14 @@ export default function FormEditor() {
                           />
                         )}
 
-                        {(field.type === 'select' || field.type === 'radio') && (
+                        {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
                           <TextField
                             label="Options (comma separated)"
-                            value={field.options?.join(', ')}
-                            onChange={(val) => updateField(field.id, 'options', val.split(',').map(s => s.trim()))}
+                            value={field.optionsRaw !== undefined ? field.optionsRaw : field.options?.join(', ')}
+                            onChange={(val) => {
+                              const newOptions = val.split(',').map(s => s.trim()).filter(s => s !== '');
+                              setFields(fields.map(f => f.id === field.id ? { ...f, options: newOptions, optionsRaw: val } : f));
+                            }}
                             autoComplete="off"
                             helpText="Example: Red, Blue, Green"
                           />
