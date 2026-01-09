@@ -78,10 +78,12 @@ export const action = async ({ request }) => {
     const firstNameKey = keys.find(k => k.toLowerCase().includes("first"));
     const lastNameKey = keys.find(k => k.toLowerCase().includes("last"));
     const nameKey = keys.find(k => k.toLowerCase() === "name" || k.toLowerCase().includes("name"));
+    const phoneKey = keys.find(k => k.toLowerCase().includes("phone") || k.toLowerCase().includes("mobile"));
 
     const email = emailKey ? data[emailKey] : null;
     const firstName = firstNameKey ? data[firstNameKey] : (nameKey ? data[nameKey] : "");
     const lastName = lastNameKey ? data[lastNameKey] : "";
+    const phone = phoneKey ? data[phoneKey] : null;
 
     if (!email) {
       return { status: "error", message: "Could not find an email address in the submission data." };
@@ -97,6 +99,9 @@ export const action = async ({ request }) => {
                node {
                  id
                  tags
+                 firstName
+                 lastName
+                 phone
                }
              }
            }
@@ -114,6 +119,27 @@ export const action = async ({ request }) => {
           currentTags.push("B2B_rejected");
         }
 
+        // Prepare customer input with updated details if different
+        const customerInput = {
+          id: existingCustomer.id,
+          tags: currentTags
+        };
+
+        // Update firstName if different
+        if (firstName && firstName !== existingCustomer.firstName) {
+          customerInput.firstName = firstName;
+        }
+
+        // Update lastName if different
+        if (lastName && lastName !== existingCustomer.lastName) {
+          customerInput.lastName = lastName;
+        }
+
+        // Update phone if different
+        if (phone && phone !== existingCustomer.phone) {
+          customerInput.phone = phone;
+        }
+
         const updateResponse = await admin.graphql(
           `#graphql
           mutation updateCustomer($input: CustomerInput!) {
@@ -124,7 +150,7 @@ export const action = async ({ request }) => {
               }
             }
           }`,
-          { variables: { input: { id: existingCustomer.id, tags: currentTags } } }
+          { variables: { input: customerInput } }
         );
         const updateJson = await updateResponse.json();
         if (updateJson.data?.customerUpdate?.userErrors?.length > 0) {
@@ -152,6 +178,7 @@ export const action = async ({ request }) => {
                 email: email,
                 firstName: firstName,
                 lastName: lastName,
+                phone: phone,
                 tags: ["B2B_rejected"]
               }
             }
@@ -166,7 +193,7 @@ export const action = async ({ request }) => {
       console.error("Customer Access Error (Reject):", error);
       return {
         status: "error",
-        message: "App does not have access to Customer data. Please approve 'Protected Customer Data' in Partner Dashboard."
+        message: `Error: ${error.message || JSON.stringify(error)}`
       };
     }
 
@@ -194,6 +221,8 @@ export const action = async ({ request }) => {
     const email = emailKey ? data[emailKey] : null;
     const firstName = firstNameKey ? data[firstNameKey] : (nameKey ? data[nameKey] : "");
     const lastName = lastNameKey ? data[lastNameKey] : "";
+    const phoneKey = keys.find(k => k.toLowerCase().includes("phone") || k.toLowerCase().includes("mobile"));
+    const phone = phoneKey ? data[phoneKey] : null;
 
     if (!email) {
       return { status: "error", message: "Could not find an email address in the submission data." };
@@ -222,6 +251,7 @@ export const action = async ({ request }) => {
               email: email,
               firstName: firstName,
               lastName: lastName,
+              phone: phone,
               tags: ["B2B_approved"]
             }
           }
@@ -231,7 +261,7 @@ export const action = async ({ request }) => {
       console.error("Customer Access Error:", error);
       return {
         status: "error",
-        message: "App does not have access to Customer data. Please approve 'Protected Customer Data' in Partner Dashboard."
+        message: `Error: ${error.message || JSON.stringify(error)}`
       };
     }
 
@@ -246,10 +276,13 @@ export const action = async ({ request }) => {
                query getCustomer($query: String!) {
                  customers(first: 1, query: $query) {
                    edges {
-                     node {
-                       id
-                       tags
-                     }
+                      node {
+                        id
+                        tags
+                        firstName
+                        lastName
+                        phone
+                      }
                    }
                  }
                }`,
@@ -263,23 +296,45 @@ export const action = async ({ request }) => {
             // Remove B2B_rejected if present
             currentTags = currentTags.filter(tag => tag !== "B2B_rejected");
             if (!currentTags.includes("B2B_approved")) {
-              const newTags = [...currentTags, "B2B_approved"];
-              const updateResponse = await admin.graphql(
-                `#graphql
-                    mutation updateCustomer($input: CustomerInput!) {
-                      customerUpdate(input: $input) {
-                        userErrors {
-                          field
-                          message
-                        }
+              currentTags.push("B2B_approved");
+            }
+
+            // Prepare customer input with updated details if different
+            const customerInput = {
+              id: existingCustomer.id,
+              tags: currentTags
+            };
+
+            // Update firstName if different
+            if (firstName && firstName !== existingCustomer.firstName) {
+              customerInput.firstName = firstName;
+            }
+
+            // Update lastName if different
+            if (lastName && lastName !== existingCustomer.lastName) {
+              customerInput.lastName = lastName;
+            }
+
+            // Update phone if different
+            if (phone && phone !== existingCustomer.phone) {
+              customerInput.phone = phone;
+            }
+
+            const updateResponse = await admin.graphql(
+              `#graphql
+                  mutation updateCustomer($input: CustomerInput!) {
+                    customerUpdate(input: $input) {
+                      userErrors {
+                        field
+                        message
                       }
-                    }`,
-                { variables: { input: { id: existingCustomer.id, tags: newTags } } }
-              );
-              const updateJson = await updateResponse.json();
-              if (updateJson.data?.customerUpdate?.userErrors?.length > 0) {
-                return { status: "error", message: "Failed to update tags: " + updateJson.data.customerUpdate.userErrors[0].message };
-              }
+                    }
+                  }`,
+              { variables: { input: customerInput } }
+            );
+            const updateJson = await updateResponse.json();
+            if (updateJson.data?.customerUpdate?.userErrors?.length > 0) {
+              return { status: "error", message: "Failed to update tags: " + updateJson.data.customerUpdate.userErrors[0].message };
             }
           } else {
             return { status: "error", message: "Email taken but could not find existing customer." };
@@ -288,7 +343,7 @@ export const action = async ({ request }) => {
           console.error("Customer Access Error (Upsert):", error);
           return {
             status: "error",
-            message: "App does not have access to Customer data to update existing customer. Please approve 'Protected Customer Data' in Partner Dashboard."
+            message: `Error: ${error.message || JSON.stringify(error)}`
           };
         }
       } else {

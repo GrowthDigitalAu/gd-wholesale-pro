@@ -20,27 +20,32 @@
       "default": "#ffffff"
     },
     {
-       "type": "range",
-       "id": "padding",
-       "min": 0,
-       "max": 100,
-       "step": 5,
-       "label": "Section Padding",
-       "default": 40
+      "type": "range",
+      "id": "padding",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "label": "Section Padding",
+      "default": 40
     }
   ]
 }
 {% endschema %}
 
-<div id="gd-custom-form-{{ block.id }}" class="gd-custom-form-wrapper" style="background-color: {{ block.settings.bg_color }}; padding: {{ block.settings.padding }}px 20px;">
+<div
+  id="gd-custom-form-{{ block.id }}"
+  class="gd-custom-form-wrapper"
+  style="background-color: {{ block.settings.bg_color }}; padding: {{ block.settings.padding }}px 20px;"
+>
   <div class="gd-form-loading">Loading form...</div>
 </div>
 
 {{ 'custom-form.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'country-codes.js' | asset_url }}" defer></script>
 <script src="{{ 'custom-form.js' | asset_url }}" defer></script>
 
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', function () {
     if (window.GDCustomForm) {
       window.GDCustomForm.init('{{ block.id }}', '{{ block.settings.form_id }}');
     }

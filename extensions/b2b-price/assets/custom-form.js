@@ -30,7 +30,6 @@
             
             const settings = form.settings ? JSON.parse(form.settings) : {};
             
-
             const headerDiv = document.createElement('div');
             headerDiv.className = 'gd-form-header';
             headerDiv.style.textAlign = 'center';
@@ -64,7 +63,6 @@
             submitBtn.className = 'gd-form-submit';
             submitBtn.innerText = settings.submitText || 'Submit';
             
-
             const submitNormalBg = settings.submitColor || '#000';
 
             const submitTextCol = settings.submitTextColor || '#fff';
@@ -73,17 +71,11 @@
             submitBtn.style.color = submitTextCol;
             submitBtn.style.width = '100%';
             
-
-
-
-            
             formEl.appendChild(submitBtn);
-
-
 
             form.fields.forEach((field) => {
                 const wrapper = document.createElement('div');
-                wrapper.className = 'gd-form-field-wrapper';
+                wrapper.className = 'gd-form-field-wrapper gd-form-' + field.type + '-' + field.id + '-wrapper';
                 wrapper.style.width = (field.width === '50') ? '50%' : '100%';
                 wrapper.style.padding = '0 10px';
                 wrapper.style.boxSizing = 'border-box';
@@ -98,8 +90,10 @@
                     const hasOptions = field.type === 'checkbox' && field.options && field.options.length > 0;
 
                     if (field.type !== 'checkbox' || hasOptions) {
-                        const label = document.createElement('label');
+                        const isGroup = field.type === 'radio' || hasOptions;
+                        const label = document.createElement(isGroup ? 'div' : 'label');
                         label.className = 'gd-form-label';
+                        if (!isGroup) label.htmlFor = 'app-' + field.id;
                         label.innerText = field.label;
                         label.style.color = settings.labelColor || '#000';
                         label.style.textAlign = 'left';
@@ -123,13 +117,15 @@
 
                     if (field.type === 'textarea') {
                         input = document.createElement('textarea');
-                        input.className = 'gd-form-input';
+                        input.id = 'app-' + field.id;
+                        input.className = 'gd-form-input gd-form-textarea-' + field.id;
                         input.rows = 4;
                         commonInputStyles(input);
                         if (field.required) input.required = true;
                     } else if (field.type === 'select') {
                         input = document.createElement('select');
-                        input.className = 'gd-form-input';
+                        input.id = 'app-' + field.id;
+                        input.className = 'gd-form-input gd-form-select-' + field.id;
                         if (field.required) input.required = true;
                         commonInputStyles(input);
 
@@ -161,21 +157,25 @@
                         radioGroup.className = 'gd-form-radio-group';
                         radioGroup.style.padding = '5px 0';
                         
-                        field.options.forEach(opt => {
+                        field.options.forEach((opt, idx) => {
                             const rWrapper = document.createElement('div');
                             rWrapper.style.display = 'flex';
                             rWrapper.style.alignItems = 'center';
                             rWrapper.style.marginBottom = '5px';
                             
+                            const optId = 'app-' + field.id + '_' + idx;
+
                             const rInput = document.createElement('input');
                             rInput.type = 'radio';
+                            rInput.id = optId;
                             rInput.name = field.id;
                             rInput.value = opt;
 
                             if(field.required) rInput.required = true;
                             
-                            const rLabel = document.createElement('span');
+                            const rLabel = document.createElement('label');
                             rLabel.innerText = opt;
+                            rLabel.htmlFor = optId;
                             rLabel.style.marginLeft = '8px';
                             rLabel.style.color = settings.labelColor || '#000';
                             
@@ -190,19 +190,23 @@
                              cbGroup.className = 'gd-form-checkbox-group';
                              cbGroup.style.padding = '5px 0';
 
-                             field.options.forEach(opt => {
+                             field.options.forEach((opt, idx) => {
                                 const cbWrapper = document.createElement('div');
                                 cbWrapper.style.display = 'flex';
                                 cbWrapper.style.alignItems = 'center';
                                 cbWrapper.style.marginBottom = '5px';
 
+                                const optId = 'app-' + field.id + '_' + idx;
+
                                 const cbInput = document.createElement('input');
                                 cbInput.type = 'checkbox';
+                                cbInput.id = optId;
                                 cbInput.name = field.id;
                                 cbInput.value = opt;
                                 
-                                const cbLabel = document.createElement('span');
+                                const cbLabel = document.createElement('label');
                                 cbLabel.innerText = opt;
+                                cbLabel.htmlFor = optId;
                                 cbLabel.style.marginLeft = '8px';
                                 cbLabel.style.color = settings.labelColor || '#000';
 
@@ -218,10 +222,12 @@
                             
                             input = document.createElement('input');
                             input.type = 'checkbox';
+                            input.id = 'app-' + field.id;
                             input.name = field.id;
                             
                             const cbLabel = document.createElement('label');
-                            cbLabel.innerText = field.placeholder || field.label; 
+                            cbLabel.innerText = field.placeholder || field.label;
+                            cbLabel.htmlFor = 'app-' + field.id; 
                             cbLabel.style.color = settings.labelColor || '#000';
 
                             if(field.required) {
@@ -235,22 +241,78 @@
                             cbWrapper.appendChild(cbLabel);
                             wrapper.appendChild(cbWrapper);
                         }
+                    } else if (field.type === 'phone') {
+                        const phoneWrapper = document.createElement('div');
+                        phoneWrapper.style.display = 'flex';
+                        phoneWrapper.style.gap = '8px';
+
+                        const codeSelect = document.createElement('select');
+                        codeSelect.name = field.id + '_code';
+                        codeSelect.className = 'gd-form-input gd-form-phone-code-' + field.id;
+                        commonInputStyles(codeSelect);
+                        codeSelect.style.width = '100px'; 
+                        codeSelect.style.minWidth = '100px';
+
+                        const codes = window.GD_COUNTRY_CODES || [];
+                        codes.forEach(c => {
+                            const opt = document.createElement('option');
+                            opt.value = c.code;
+                            opt.text = c.label;
+                            codeSelect.appendChild(opt);
+                        });
+                        // Default to India or US or first
+                        codeSelect.value = '+91';  
+
+                        input = document.createElement('input');
+                        input.type = 'tel';
+                        input.id = 'app-' + field.id;
+                        input.name = field.id + '_num';
+                        input.className = 'gd-form-input gd-form-phone-' + field.id;
+                        input.placeholder = field.placeholder;
+                        commonInputStyles(input);
+                        input.style.flex = '1';
+                        
+                        input.addEventListener('input', function(e) {
+                            this.value = this.value.replace(/[^0-9]/g, '');
+                        });
+
+                        phoneWrapper.appendChild(codeSelect);
+                        phoneWrapper.appendChild(input);
+                        wrapper.appendChild(phoneWrapper);
+
+                        // Prevent the default input append below
+                        input = null; 
                     } else {
 
                     input = document.createElement('input');
                     input.type = field.type;
-                    input.className = 'gd-form-input';
+                    input.id = 'app-' + field.id;
+                    input.className = 'gd-form-input gd-form-' + field.type + '-' + field.id;
                     commonInputStyles(input);
                     }
 
-                    if (field.type !== 'checkbox' && field.type !== 'radio') {
+                    if (field.type !== 'checkbox' && field.type !== 'radio' && field.type !== 'phone') {
                         if (field.placeholder && field.type !== 'date' && field.type !== 'file') input.placeholder = field.placeholder;
                         wrapper.appendChild(input);
                     }
                     
                     if (input) {
                         input.name = field.id;
-                        if (field.required) input.required = true;
+                        if (field.required) {
+                             if (field.type === 'phone') {
+                                 // Handled by the _num input
+                             } else {
+                                input.required = true;
+                             }
+                        }
+                    }
+                    if (field.type === 'phone' && field.required) {
+                         // We set required on the number input inside the if block above, but input is null now.
+                         // We need to set it on the element we created.
+                         // Actually, we lost reference to 'input' var for phone. 
+                         // Let's refactor slightly or just find it.
+                         const numInput = wrapper.querySelector(`input[name="${field.id}_num"]`);
+                         if(numInput) numInput.required = true;
                     }
                 }
 
@@ -290,12 +352,9 @@
                 const processField = async (f) => {
                 if (f.type === 'header') return;
                 
-
-                
                 const el = formEl.elements[f.id];
 
-                
-                if (!el) return;
+                if (!el && f.type !== 'phone') return;
 
                 if (f.type === 'checkbox') {
                     if (el instanceof NodeList || (el instanceof RadioNodeList && el.length > 1)) {
@@ -340,6 +399,10 @@
                     } else {
                         formData[f.label] = "";
                     }
+                } else if (f.type === 'phone') {
+                    const code = formEl.elements[f.id + '_code'].value;
+                    const num = formEl.elements[f.id + '_num'].value;
+                    formData[f.label] = code + num;
                 } else {
                     formData[f.label] = el.value;
                 }

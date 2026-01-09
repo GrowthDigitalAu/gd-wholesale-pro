@@ -21,6 +21,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import db from "../db.server";
+import { COUNTRY_CODES } from "../country_codes";
 
 // Helper to convert HSB to Hex
 function hsbToHex({ hue, saturation, brightness }) {
@@ -390,6 +391,22 @@ function SortableField({ field, isActive, onClick, styleSettings }) {
                 type="date"
                 style={{ ...inputStyle }}
               />
+            ) : field.type === 'phone' ? (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <select 
+                  style={{ ...inputStyle, width: '100px' }}
+                >
+                  {COUNTRY_CODES.map(c => (
+                    <option key={c.label} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  placeholder={ field.placeholder }
+                  style={{ ...inputStyle, flex: 1 }}
+                  onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')}
+                />
+              </div>
             ) : (
               <input
                 type={field.type}
@@ -487,6 +504,9 @@ export default function FormEditor() {
     { label: "Single Line Text", value: "text" },
     { label: "Paragraph Text", value: "textarea" },
     { label: "Email", value: "email" },
+    { label: "Paragraph Text", value: "textarea" },
+    { label: "Email", value: "email" },
+    { label: "Phone", value: "phone" },
     { label: "Number", value: "number" },
     { label: "Date / Birthday", value: "date" },
     { label: "Dropdown", value: "select" },
