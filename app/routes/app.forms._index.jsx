@@ -1,6 +1,6 @@
-import { useLoaderData, Link, useRouteError, useSubmit, useActionData, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, Link, useRouteError, useSubmit, useActionData, useNavigate, useNavigation, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { EmptyState } from "@shopify/polaris";
+import { EmptyState, Pagination } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -13,15 +13,48 @@ export const loader = async ({ request }) => {
       orderBy: { createdAt: "desc" },
     });
 
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const tab = url.searchParams.get("tab") || "all";
+    const limit = 10;
+    const skip = (page - 1) * limit;
+
+    let where = {
+      form: {
+        shop: session.shop
+      }
+    };
+
+    if (tab === 'pending') {
+      where = {
+        ...where,
+        status: {
+          notIn: ['APPROVED', 'REJECTED']
+        }
+      };
+    } else if (tab === 'approved') {
+      where.status = 'APPROVED';
+    } else if (tab === 'rejected') {
+      where.status = 'REJECTED';
+    }
+
     let recentSubmissions = [];
+    let pagination = {
+      currentPage: 1,
+      totalPages: 1,
+      totalCount: 0,
+      hasNextPage: false,
+      hasPreviousPage: false
+    };
+
     try {
+      const totalCount = await db.formSubmission.count({ where });
+      const totalPages = Math.ceil(totalCount / limit);
+
       recentSubmissions = await db.formSubmission.findMany({
-        where: {
-          form: {
-            shop: session.shop
-          }
-        },
-        take: 10,
+        where,
+        take: limit,
+        skip: skip,
         orderBy: { createdAt: "desc" },
         include: {
           form: {
@@ -29,12 +62,28 @@ export const loader = async ({ request }) => {
           }
         }
       });
+
+      pagination = {
+        currentPage: page,
+        totalPages,
+        totalCount,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      };
+
     } catch (dbError) {
       console.error("Failed to fetch recent submissions:", dbError);
-      // We don't want to crash the whole page if just the submissions fail
     }
 
-    return { forms, recentSubmissions };
+    const totalSubmissionsCount = await db.formSubmission.count({
+      where: {
+        form: {
+          shop: session.shop
+        }
+      }
+    });
+
+    return { forms, recentSubmissions, pagination, activeTab: tab, totalSubmissionsCount };
   } catch (error) {
     console.error("Dashboard Loader Error:", error);
     throw error; // Let the ErrorBoundary handle the main crash
@@ -240,12 +289,12 @@ export const headers = (headersArgs) => {
 import { useState, useEffect } from "react";
 
 export default function Forms() {
-  const { forms, recentSubmissions } = useLoaderData();
+  const { forms, recentSubmissions, pagination, activeTab, totalSubmissionsCount } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData();
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     if (actionData) {
@@ -257,6 +306,13 @@ export default function Forms() {
     }
   }, [actionData]);
 
+  // Calculate pagination label
+  const startItem = (pagination.currentPage - 1) * 10 + 1;
+  const endItem = Math.min(startItem + recentSubmissions.length - 1, pagination.totalCount);
+  const paginationLabel = pagination.totalCount > 0 
+    ? `${startItem}-${endItem} of ${pagination.totalCount} submissions` 
+    : "No submissions";
+
   const tabs = [
     { id: 'all', content: 'All' },
     { id: 'pending', content: 'Pending' },
@@ -264,18 +320,16 @@ export default function Forms() {
     { id: 'rejected', content: 'Rejected' },
   ];
 
-  const filteredSubmissions = recentSubmissions.filter((sub) => {
-    switch (selectedTab) {
-      case 1: // Pending
-        return !sub.status || sub.status === 'PENDING';
-      case 2: // Approved
-        return sub.status === 'APPROVED';
-      case 3: // Rejected
-        return sub.status === 'REJECTED';
-      default: // All
-        return true;
-    }
-  });
+  const handleTabChange = (tabId) => {
+    setSearchParams({ tab: tabId, page: '1' });
+  };
+
+  const handlePageChange = (newPage) => {
+    setSearchParams({ tab: activeTab, page: String(newPage) });
+  };
+
+  // We use recentSubmissions directly now as it is filtered by the server
+  const filteredSubmissions = recentSubmissions;
 
   const handleDelete = (id) => {
     submit({ id, intent: "delete" }, { method: "post" });
@@ -342,7 +396,7 @@ export default function Forms() {
           )}
         </s-section>
 
-        {recentSubmissions && recentSubmissions.length > 0 && (
+        {totalSubmissionsCount > 0 && (
           <s-box paddingBlockStart="large">
             <s-section>
               <s-text type="strong">Form Submissions</s-text>
@@ -353,30 +407,30 @@ export default function Forms() {
                 marginBottom: '16px',
                 marginTop: '12px'
               }}>
-                {tabs.map((tab, index) => (
+                {tabs.map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => setSelectedTab(index)}
+                    onClick={() => handleTabChange(tab.id)}
                     style={{
                       padding: '12px 16px',
                       border: 'none',
                       background: 'transparent',
                       cursor: 'pointer',
-                      borderBottom: selectedTab === index ? '2px solid #2c6ecb' : '2px solid transparent',
-                      color: selectedTab === index ? '#2c6ecb' : '#202223',
-                      fontWeight: selectedTab === index ? '600' : '400',
+                      borderBottom: activeTab === tab.id ? '2px solid #2c6ecb' : '2px solid transparent',
+                      color: activeTab === tab.id ? '#2c6ecb' : '#202223',
+                      fontWeight: activeTab === tab.id ? '600' : '400',
                       fontSize: '14px',
                       transition: 'all 0.2s ease',
                       fontFamily: '-apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif',
                       marginBottom: '-1px'
                     }}
                     onMouseEnter={(e) => {
-                      if (selectedTab !== index) {
+                      if (activeTab !== tab.id) {
                         e.currentTarget.style.color = '#2c6ecb';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (selectedTab !== index) {
+                      if (activeTab !== tab.id) {
                         e.currentTarget.style.color = '#202223';
                       }
                     }}
@@ -509,6 +563,17 @@ export default function Forms() {
                       )}
                     </s-table-body>
                   </s-table>
+              )}
+
+             {pagination.totalPages > 1 && (
+                <Pagination
+                  hasPrevious={pagination.hasPreviousPage}
+                  onPrevious={() => handlePageChange(pagination.currentPage - 1)}
+                  hasNext={pagination.hasNextPage}
+                  onNext={() => handlePageChange(pagination.currentPage + 1)}
+                  type="table"
+                  label={paginationLabel}
+                />
               )}
             </s-section>
           </s-box>
