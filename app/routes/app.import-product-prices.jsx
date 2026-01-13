@@ -36,9 +36,8 @@ export const loader = async ({ request }) => {
         }
 
         if (bulkOperation.status === "COMPLETED") {
-             // Check result file for userErrors
+             // Check result file for userErrors only
              let bulkErrors = [];
-             let successCount = 0;
              
              if (bulkOperation.url) {
                 try {
@@ -50,19 +49,15 @@ export const loader = async ({ request }) => {
                         const userErrors = result.productVariantsBulkUpdate?.userErrors || [];
                         if (userErrors.length > 0) {
                              bulkErrors.push(userErrors[0].message);
-                        } else {
-                             // Count the actual variants updated (not products)
-                             const variantsUpdated = result.productVariantsBulkUpdate?.productVariants?.length || 0;
-                             successCount += variantsUpdated;
                         }
                     });
                 } catch (e) {
                     console.error("Error parsing bulk result", e);
                 }
-             } else {
-                 successCount = parseInt(bulkOperation.objectCount) || 0;
              }
-             return { success: true, status: "COMPLETED", bulkResults: { updated: successCount, errors: bulkErrors }, operationId };
+             
+             // Return success - the frontend will use the expectedUpdateCount
+             return { success: true, status: "COMPLETED", bulkResults: { errors: bulkErrors }, operationId };
 
         } else if (bulkOperation.status === "RUNNING" || bulkOperation.status === "CREATED") {
              return { success: true, status: "RUNNING", progress: bulkOperation.objectCount, operationId };
@@ -78,7 +73,9 @@ export const action = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
     const dataString = formData.get("data");
+    const headersString = formData.get("headers");
     const rows = JSON.parse(dataString);
+    const headersFromFrontend = headersString ? JSON.parse(headersString) : null;
 
     const results = {
         total: rows.length,
@@ -87,6 +84,37 @@ export const action = async ({ request }) => {
         failedRows: [],
         skippedRows: [],
         bulkOperationId: null
+    };
+
+    // Use headers from frontend if available, otherwise collect from rows
+    let allColumns = [];
+    if (headersFromFrontend && headersFromFrontend.length > 0) {
+        allColumns = headersFromFrontend;
+    } else {
+        // Fallback: collect from rows (preserve order)
+        const allColumnsSet = new Set();
+        rows.forEach(row => {
+            Object.keys(row).forEach(key => {
+                if (!allColumnsSet.has(key)) {
+                    allColumnsSet.add(key);
+                    allColumns.push(key);
+                }
+            });
+        });
+    }
+
+    // Helper function to ensure all columns are present in a row (in correct order)
+    const normalizeRow = (row, additionalFields = {}) => {
+        const normalized = {};
+        // First, add all columns in the original order
+        allColumns.forEach(col => {
+            normalized[col] = row[col] !== undefined ? row[col] : "";
+        });
+        // Then add any additional fields (like Error Reason)
+        Object.keys(additionalFields).forEach(key => {
+            normalized[key] = additionalFields[key];
+        });
+        return normalized;
     };
 
     // 1. PREFETCH ALL VARIANTS WITH PRICE DATA
@@ -160,7 +188,7 @@ export const action = async ({ request }) => {
                 const parsed = parseFloat(priceRaw);
                 if (isNaN(parsed)) {
                     results.errors.push(`Skipped SKU ${sku}: Invalid Price value '${priceRaw}'`);
-                    results.failedRows.push({ ...row, "Error Reason": 'Invalid Price value' });
+                    results.failedRows.push(normalizeRow(row, { "Error Reason": 'Invalid Price value' }));
                     continue;
                 }
                 newPrice = parsed;
@@ -177,7 +205,7 @@ export const action = async ({ request }) => {
                     const parsed = parseFloat(trimmed);
                     if (isNaN(parsed)) {
                         results.errors.push(`Skipped SKU ${sku}: Invalid CompareAt Price value '${compareAtPriceRaw}'`);
-                        results.failedRows.push({ ...row, "Error Reason": 'Invalid CompareAt Price value' });
+                        results.failedRows.push(normalizeRow(row, { "Error Reason": 'Invalid CompareAt Price value' }));
                         continue;
                     }
                     newCompareAtPrice = parsed;
@@ -196,7 +224,7 @@ export const action = async ({ request }) => {
             // Check for duplicates
             if (processedCombinations.has(skuKey)) {
                 results.errors.push(`Skipped SKU ${sku}: Duplicate SKU in file`);
-                results.failedRows.push({ ...row, "Error Reason": 'Duplicate SKU in file' });
+                results.failedRows.push(normalizeRow(row, { "Error Reason": 'Duplicate SKU in file' }));
                 continue;
             }
             processedCombinations.add(skuKey);
@@ -206,7 +234,7 @@ export const action = async ({ request }) => {
             
             if (!variantData) {
                 results.errors.push(`Variant not found for SKU: ${sku}`);
-                results.failedRows.push({ ...row, "Error Reason": 'Variant not found' });
+                results.failedRows.push(normalizeRow(row, { "Error Reason": 'Variant not found' }));
                 continue;
             }
 
@@ -246,7 +274,7 @@ export const action = async ({ request }) => {
             }
 
             if (!needsUpdate) {
-                results.skippedRows.push({ ...row, "Reason": 'Prices already match' });
+                results.skippedRows.push(normalizeRow(row, { "Reason": 'Prices already match' }));
                 continue;
             }
 
@@ -258,7 +286,7 @@ export const action = async ({ request }) => {
 
         } catch (error) {
             results.errors.push(`Error processing SKU ${row["SKU"]}: ${error.message}`);
-            results.failedRows.push({ ...row, "Error Reason": error.message });
+            results.failedRows.push(normalizeRow(row, { "Error Reason": error.message }));
         }
     }
 
@@ -352,6 +380,8 @@ export const action = async ({ request }) => {
              
              if (opId) {
                  results.bulkOperationId = opId;
+                 // Store how many variants we queued for update
+                 results.expectedUpdateCount = bulkUpdates.length;
              } else {
                  results.errors.push("Failed to trigger backend bulk operation (No ID returned)");
              }
@@ -420,8 +450,13 @@ export default function ImportProductPrices() {
                 setParsedData(jsonData);
                 shopify.toast.show(`File loaded: ${jsonData.length} rows. Starting import...`, { duration: 5000 });
                 setIsProgressVisible(true);
-                setProgress(10); 
-                fetcher.submit({ data: JSON.stringify(jsonData) }, { method: "POST" });
+                setProgress(10);
+                // Send headers to preserve column order
+                const headersInOrder = headers.filter(h => h); // Remove empty entries
+                fetcher.submit({ 
+                    data: JSON.stringify(jsonData),
+                    headers: JSON.stringify(headersInOrder)
+                }, { method: "POST" });
             };
             reader.readAsArrayBuffer(selectedFile);
         }
@@ -461,11 +496,12 @@ export default function ImportProductPrices() {
                        }, 2000);
                        return () => clearTimeout(timer);
                   } else if (pollFetcher.data.status === "COMPLETED") {
-                       const bulkRes = pollFetcher.data.bulkResults || { updated: 0, errors: [] };
+                       const bulkRes = pollFetcher.data.bulkResults || { errors: [] };
                        
                        const merged = {
                            ...validatedResults,
-                           updated: bulkRes.updated, 
+                           // Use the expected count we stored during validation
+                           updated: validatedResults.expectedUpdateCount || 0,
                            errors: [...validatedResults.errors, ...bulkRes.errors]
                        };
                        setFinalResults(merged);
