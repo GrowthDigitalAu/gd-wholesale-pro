@@ -248,7 +248,7 @@ export default function ExportProductData() {
                             });
                         }
                         
-                        const b2bPrice = obj.metafield?.value ? parseFloat(obj.metafield.value).toFixed(2) : "";
+                        const b2bPrice = obj.metafield?.value ? parseFloat(obj.metafield.value) : null;
 
                         rows.push({
                             "Product Title": product?.title || "Unknown",
@@ -256,8 +256,8 @@ export default function ExportProductData() {
                             "Option1 Value": options["Option1 Value"],
                             "Option2 Value": options["Option2 Value"],
                             "Option3 Value": options["Option3 Value"],
-                            "Price": obj.price || "",
-                            "CompareAt Price": obj.compareAtPrice || "",
+                            "Price": obj.price ? parseFloat(obj.price) : null,
+                            "CompareAt Price": obj.compareAtPrice ? parseFloat(obj.compareAtPrice) : null,
                             "B2B Price": b2bPrice
                         });
                     }
