@@ -159,6 +159,16 @@ export default function B2BPricing() {
 
     const isSaving = fetcher.state !== "idle";
 
+    // Sync state with loader data when it changes (pagination/search)
+    useEffect(() => {
+        if (initialAdjustments) {
+            setPriceAdjustments(prev => ({
+                ...prev,
+                ...initialAdjustments
+            }));
+        }
+    }, [initialAdjustments]);
+
     const currentPage = parseInt(searchParams.get("page") || "1", 10);
 
     // Debounce search function
