@@ -275,10 +275,9 @@ export default function B2BPricing() {
         const updates = [];
         // Send all adjustments for currently visible products (including empty ones for deletion)
         filteredProducts.forEach(({ node: product }) => {
-            const selectedVariant = getSelectedVariant(product);
-            if (selectedVariant) {
-                const currentVal = priceAdjustments[selectedVariant.id];
-                const initialVal = initialAdjustments[selectedVariant.id];
+            product.variants.edges.forEach(({ node: variant }) => {
+                const currentVal = priceAdjustments[variant.id];
+                const initialVal = initialAdjustments[variant.id];
 
                 // Convert both to string for comparison to avoid float issues, or standardized float
                 // initialVal is float or undefined
@@ -303,11 +302,11 @@ export default function B2BPricing() {
 
                 if (hasChanged) {
                     updates.push({
-                        variantId: selectedVariant.id,
+                        variantId: variant.id,
                         adjustment: currentVal // Pass the raw string/value to action
                     });
                 }
-            }
+            });
         });
 
         if (updates.length > 0) {
