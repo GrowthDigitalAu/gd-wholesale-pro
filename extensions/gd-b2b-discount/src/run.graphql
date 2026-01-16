@@ -2,7 +2,7 @@ query RunInput {
   cart {
     buyerIdentity {
       customer {
-        hasAnyTag(tags: ["b2b"])
+        hasAnyTag(tags: ["B2B_approved"])
       }
     }
     lines {

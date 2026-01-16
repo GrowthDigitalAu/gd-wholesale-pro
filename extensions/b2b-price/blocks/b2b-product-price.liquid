@@ -1,10 +1,13 @@
 {% assign selected_product = block.settings.product %}
 {% assign has_b2b_tag = false %}
 {% for tag in customer.tags %}
-  {% if tag == 'b2b' %}
+  {% assign tag_downcase = tag | downcase %}
+  {% if tag_downcase == 'b2b_approved' %}
     {% assign has_b2b_tag = true %}
   {% endif %}
 {% endfor %}
+
+{% comment %} <div class="gd-b2b-price-update"></div> {% endcomment %}
 
 <div id="b2b-price-container-{{ block.id }}" class="b2b-price-container">
   {% assign current_variant = selected_product.selected_or_first_available_variant %}
