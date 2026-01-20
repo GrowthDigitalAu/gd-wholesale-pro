@@ -356,7 +356,7 @@ export default function B2BPricing() {
                                             <s-table-header>SKU</s-table-header>
                                             <s-table-header>Base price</s-table-header>
                                             <s-table-header>Price adjustment</s-table-header>
-                                            <s-table-header>Add Conditions</s-table-header>
+
                                         </s-table-header-row>
                                         <s-table-body>
                                             {filteredProducts.map(({ node: product }) => {
@@ -437,11 +437,7 @@ export default function B2BPricing() {
                                                                 />
                                                             </div>
                                                         </s-table-cell>
-                                                        <s-table-cell>
-                                                            <s-button size="slim" onClick={() => shopify.toast.show('Conditions option coming soon')}>
-                                                                + Add
-                                                            </s-button>
-                                                        </s-table-cell>
+
                                                     </s-table-row>
                                                 );
                                             })}
