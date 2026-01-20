@@ -136,6 +136,7 @@
     // Listen for click on variant pickers
     document.body.addEventListener('click', function(e) {
       if (e.target.matches('.js-gd-ext-variant-picker-rb')) {
+        console.log("------>>>>heyyyy");
          const productContainer = e.target.closest('.js-gd-ext-product-info-container');
          const variantId = e.target.getAttribute('data-variant-id');
          observeAndTriggerUpdate(productContainer, variantId);

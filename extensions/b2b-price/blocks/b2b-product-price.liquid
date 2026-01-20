@@ -32,7 +32,11 @@
   {% endif %}
 </div>
 
-<script>
+<style style="display: none;">
+  {{ block.settings.custom_css }}
+</style>
+
+<script style="display: none;">
   window.b2bPriceConfigs = window.b2bPriceConfigs || [];
   window.b2bPriceConfigs.push({
     isB2B: {{ has_b2b_tag | json }},
@@ -54,6 +58,7 @@
 {% schema %}
 {
   "name": "B2B Product Price",
+  "class": "gd-b2b-product-price",
   "target": "section",
   "javascript": "b2b-product-price.js",
   "settings": [
@@ -62,6 +67,12 @@
       "id": "product",
       "label": "product",
       "autofill": true
+    },
+    {
+      "type": "textarea",
+      "id": "custom_css",
+      "label": "Custom CSS",
+      "info": "Add custom CSS here."
     }
   ]
 }
