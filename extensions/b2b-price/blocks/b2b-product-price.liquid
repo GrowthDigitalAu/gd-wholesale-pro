@@ -7,60 +7,60 @@
   {% endif %}
 {% endfor %}
 
-<div id="b2b-price-container-{{ block.id }}" class="b2b-price-container">
-  {% assign current_variant = selected_product.selected_or_first_available_variant %}
-  {% assign b2b_price = current_variant.metafields.app.original_price.value | times: 100 %}
+<b2b-prod-price id="b2b-price-container-{{ block.id }}" class="b2b-price-container">
+  <div class="js-b2b-price-wrapper">
+    {% assign current_variant = selected_product.selected_or_first_available_variant %}
+    {% assign b2b_price = current_variant.metafields.app.original_price.value | times: 100 %}
 
-  {% if has_b2b_tag and b2b_price > 0 %}
-    <div class="b2b-price-wrapper b2b-customer-price">
-      <span class="b2b-price-current">{{ b2b_price | money }}</span>
-      <span class="b2b-price-original" style="text-decoration: line-through;">
-        {{- current_variant.price | money -}}
-      </span>
-    </div>
-  {% elsif current_variant.compare_at_price > current_variant.price %}
-    <div class="b2b-price-wrapper b2b-regular-sale">
-      <span class="b2b-price-current">{{ current_variant.price | money }}</span>
-      <span class="b2b-price-compare" style="text-decoration: line-through;">
-        {{- current_variant.compare_at_price | money -}}
-      </span>
-    </div>
-  {% else %}
-    <div class="b2b-price-wrapper b2b-regular-price">
-      <span class="b2b-price-current">{{ current_variant.price | money }}</span>
-    </div>
-  {% endif %}
-</div>
+    {% if has_b2b_tag and b2b_price > 0 %}
+      <div class="b2b-price-wrapper b2b-customer-price">
+        <span class="b2b-price-current">{{ b2b_price | money }}</span>
+        <span class="b2b-price-original" style="text-decoration: line-through;">
+          {{- current_variant.price | money -}}
+        </span>
+      </div>
+    {% elsif current_variant.compare_at_price > current_variant.price %}
+      <div class="b2b-price-wrapper b2b-regular-sale">
+        <span class="b2b-price-current">{{ current_variant.price | money }}</span>
+        <span class="b2b-price-compare" style="text-decoration: line-through;">
+          {{- current_variant.compare_at_price | money -}}
+        </span>
+      </div>
+    {% else %}
+      <div class="b2b-price-wrapper b2b-regular-price">
+        <span class="b2b-price-current">{{ current_variant.price | money }}</span>
+      </div>
+    {% endif %}
+  </div>
 
-<style style="display: none;">
-  {{ block.settings.custom_css }}
-</style>
+  <script type="application/json">
+    {
+      "isB2B": {{ has_b2b_tag | json }},
+      "moneyFormat": {{ shop.money_format | json }},
+      "variantsData": {
+        {% for variant in selected_product.variants %}
+          "{{ variant.id }}": {
+            "price": {{ variant.price }},
+            "compare_at_price": {% if variant.compare_at_price %}{{ variant.compare_at_price }}{% else %}null{% endif %},
+            "b2b_price": {% if variant.metafields.app.original_price.value %}{{ variant.metafields.app.original_price.value | times: 100 }}{% else %}null{% endif %}
+          }{% unless forloop.last %},{% endunless %}
+        {% endfor %}
+      },
+      "blockId": "{{ block.id }}",
+      "selectedVariantId": "{{ selected_product.selected_or_first_available_variant.id }}"
+    }
+  </script>
 
-<script style="display: none;">
-  window.b2bPriceConfigs = window.b2bPriceConfigs || [];
-  window.b2bPriceConfigs.push({
-    isB2B: {{ has_b2b_tag | json }},
-    moneyFormat: {{ shop.money_format | json }},
-    variantsData: {
-      {% for variant in selected_product.variants %}
-        "{{ variant.id }}": {
-          price: {{ variant.price }},
-          compare_at_price: {{ variant.compare_at_price | default: 'null' }},
-          b2b_price: {{ variant.metafields.app.original_price.value | times: 100 | default: 'null' }}
-        }{% unless forloop.last %},{% endunless %}
-      {% endfor %}
-    },
-    blockId: "{{ block.id }}",
-    selectedVariantId: "{{ selected_product.selected_or_first_available_variant.id }}"
-  });
-</script>
+  <style style="display: none;">
+    {{ block.settings.custom_css }}
+  </style>
+</b2b-prod-price>
 
 {% schema %}
 {
   "name": "B2B Product Price",
   "class": "gd-b2b-product-price",
   "target": "section",
-  "javascript": "b2b-product-price.js",
   "settings": [
     {
       "type": "product",

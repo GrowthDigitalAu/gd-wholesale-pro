@@ -1,170 +1,251 @@
 (function() {
-  function formatMoney(cents, format) {
-    if (typeof cents === 'string') cents = cents.replace('.', '');
-    let value = '';
-    const placeholderRegex = /\{\{\s*(\w+)\s*\}\}/;
-    const formatString = format || "${{amount}}";
+  if (customElements.get('b2b-prod-price')) return;
 
-    function defaultOption(opt, def) {
-       return (typeof opt == 'undefined' ? def : opt);
+  class B2bProdPrice extends HTMLElement {
+    constructor() {
+      super();
+      this._instanceId = Math.random().toString(36).substr(2, 9);
     }
 
-    function formatWithDelimiters(number, precision, thousands, decimal) {
-      precision = defaultOption(precision, 2);
-      thousands = defaultOption(thousands, ',');
-      decimal   = defaultOption(decimal, '.');
+    connectedCallback() {
+      this.setupVisibilityObserver();
+    }
+
+    disconnectedCallback() {
+      console.log("HelloBox disconnectedCallback");
+      this.cleanup();
+    }
+    
+    cleanup() {
+      this.unbindEvents();
+      if (this.visibilityObserver) {
+        this.visibilityObserver.disconnect();
+        this.visibilityObserver = null;
+      }
+      this.dataset.initialized = "false";
+    }
+
+    setupVisibilityObserver() {
+      if (this.visibilityObserver) return;
+
+      this.visibilityObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            console.log("HelloBox connectedCallback");
+            this.handleConnect();
+          } else {
+             console.log("HelloBox disconnectedCallback---");
+             this.unbindEvents(); 
+             this.dataset.initialized = "false"; // Allo re-init if shown again
+          }
+        });
+      }, {
+        threshold: [0] 
+      });
+
+      this.visibilityObserver.observe(this);
+    }
+
+    handleConnect() {
+      if (this.dataset.initialized === "true") return;
+
+      const config = this.getConfiguration();
+      console.log("----->>>", config);
+      if (config) {
+        this.config = config;
+        this.initB2BPrice(this.config);
+        this.bindEvents();
+      }
+    }
+
+    getConfiguration() {
+      const scriptTag = this.querySelector('script');
+      if (!scriptTag || !scriptTag.textContent) return null;
+      try {
+        return JSON.parse(scriptTag.textContent.trim());
+      } catch (e) {
+        console.error("Error parsing config from script", e);
+        return null;
+      }
+    }
+
+    formatMoney(cents, format) {
+      if (typeof cents === 'string') cents = cents.replace('.', '');
+      let value = '';
+      const placeholderRegex = /\{\{\s*(\w+)\s*\}\}/;
+      const formatString = format || "${{amount}}";
+
+      switch(formatString.match(placeholderRegex)[1]) {
+        case 'amount':
+          value = this.formatWithDelimiters(cents, 2);
+          break;
+        case 'amount_no_decimals':
+          value = this.formatWithDelimiters(cents, 0);
+          break;
+        case 'amount_with_comma_separator':
+          value = this.formatWithDelimiters(cents, 2, '.', ',');
+          break;
+        case 'amount_no_decimals_with_comma_separator':
+          value = this.formatWithDelimiters(cents, 0, '.', ',');
+          break;
+      }
+
+      return formatString.replace(placeholderRegex, value);
+    }
+
+    defaultOption(opt, def) {
+      return (typeof opt == 'undefined' ? def : opt);
+    }
+
+    formatWithDelimiters(number, precision, thousands, decimal) {
+      precision = this.defaultOption(precision, 2);
+      thousands = this.defaultOption(thousands, ',');
+      decimal = this.defaultOption(decimal, '.');
 
       if (isNaN(number) || number == null) { return 0; }
 
       number = (number/100.0).toFixed(precision);
 
-      var parts   = number.split('.'),
+      var parts = number.split('.'),
           dollars = parts[0].replace(/(\d)(?=(\d\d\d)+(?!\d))/g, '$1' + thousands),
-          cents   = parts[1] ? (decimal + parts[1]) : '';
+          cents = parts[1] ? (decimal + parts[1]) : '';
 
       return dollars + cents;
     }
 
-    switch(formatString.match(placeholderRegex)[1]) {
-      case 'amount':
-        value = formatWithDelimiters(cents, 2);
-        break;
-      case 'amount_no_decimals':
-        value = formatWithDelimiters(cents, 0);
-        break;
-      case 'amount_with_comma_separator':
-        value = formatWithDelimiters(cents, 2, '.', ',');
-        break;
-      case 'amount_no_decimals_with_comma_separator':
-        value = formatWithDelimiters(cents, 0, '.', ',');
-        break;
+    updateTarget(container, html) {
+      if (container) {
+          container.innerHTML = html;
+      }
     }
 
-    return formatString.replace(placeholderRegex, value);
-  }
-
-  function updateTarget(container, html) {
-    if (container) container.innerHTML = html;
-  }
-
-  function initB2BPrice(config) {
-    const { isB2B, moneyFormat, variantsData, blockId, selectedVariantId } = config;
-    let currentHtml = '';
-
-    function updatePriceDisplay(variantId) {
-      const data = variantsData[variantId];
-      if (!data) return;
-
-      let html = '';
-
-      if (isB2B && data.b2b_price && data.b2b_price > 0) {
-         html = `
-            <div class="b2b-price-wrapper b2b-customer-price">
-                <span class="b2b-price-current">${formatMoney(data.b2b_price, moneyFormat)}</span>
-                <span class="b2b-price-original" style="text-decoration: line-through;">
-                  ${formatMoney(data.price, moneyFormat)}
-                </span>
-            </div>
-         `;
-      } 
-      else if (data.compare_at_price && data.compare_at_price > data.price) {
-         html = `
-            <div class="b2b-price-wrapper b2b-regular-sale">
-                <span class="b2b-price-current">${formatMoney(data.price, moneyFormat)}</span>
-                <span class="b2b-price-compare" style="text-decoration: line-through;">
-                  ${formatMoney(data.compare_at_price, moneyFormat)}
-                </span>
-            </div>
-         `;
-      }
-      else {
-         html = `
-            <div class="b2b-price-wrapper b2b-regular-price">
-                <span class="b2b-price-current">${formatMoney(data.price, moneyFormat)}</span>
-            </div>
-         `;
-      }
+    initB2BPrice(config) {
+      this.dataset.initialized = "true";
+      const { selectedVariantId } = config;
       
-      currentHtml = html; 
-
-      const internalContainer = document.getElementById("b2b-price-container-" + blockId);
-      updateTarget(internalContainer, html);
+      console.log('--->>>>selectedVariantId', selectedVariantId);
+      if (selectedVariantId) {
+          this.updatePriceDisplay(selectedVariantId);
+      }
     }
 
-    function observeAndTriggerUpdate(productContainer, fallbackVariantId) {
+    updatePriceDisplay(variantId) {
+        if (!this.config) return;
+        const { isB2B, moneyFormat, variantsData } = this.config;
+        
+        const data = variantsData[variantId];
+        if (!data) return;
+
+        let html = '';
+
+        if (isB2B && data.b2b_price && data.b2b_price > 0) {
+           html = `
+              <div class="b2b-price-wrapper b2b-customer-price" style="display: block !important;">
+                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.b2b_price, moneyFormat)}</span>
+                  <span class="b2b-price-original" style="text-decoration: line-through; display: block !important;">
+                    ${this.formatMoney(data.price, moneyFormat)}
+                  </span>
+              </div>
+           `;
+        } 
+        else if (data.compare_at_price && data.compare_at_price > data.price) {
+           html = `
+              <div class="b2b-price-wrapper b2b-regular-sale" style="display: block !important;">
+                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.price, moneyFormat)}</span>
+                  <span class="b2b-price-compare" style="text-decoration: line-through; display: block !important;">
+                    ${this.formatMoney(data.compare_at_price, moneyFormat)}
+                  </span>
+              </div>
+           `;
+        }
+        else {
+           html = `
+              <div class="b2b-price-wrapper b2b-regular-price" style="display: block !important;">
+                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.price, moneyFormat)}</span>
+              </div>
+           `;
+        }
+        
+        const priceWrapper = this.querySelector('.js-b2b-price-wrapper');
+        if (priceWrapper) {
+            this.updateTarget(priceWrapper, html);
+        }
+    }
+
+    bindEvents() {
+        if (this.hasBoundEvents) return;
+        
+        this.onVariantChange = this.handleVariantChange.bind(this);
+        document.body.addEventListener('change', this.onVariantChange);
+
+        this.hasBoundEvents = true;
+    }
+
+    unbindEvents() {
+        if (!this.hasBoundEvents) return;
+        document.body.removeEventListener('change', this.onVariantChange);
+        this.hasBoundEvents = false;
+    }
+
+    safeObserveAndTrigger(productContainer) {
+        if (!productContainer.contains(this) && productContainer !== this) {
+             if (!productContainer.querySelector(`#${this.id}`)) {
+                 return; 
+             }
+        }
+        this.observeAndTriggerUpdate(productContainer);
+    }
+
+    handleVariantChange(e) {
+        // Handle both Dropdowns and Radio Buttons with unified class name
+        console.log("Variant change detected", e.target);
+        if (e.target.matches('.js-gd-ext-variant-picker')) {
+             const productContainer = e.target.closest('.js-gd-ext-product-info-container');
+             if (productContainer) {
+                 this.safeObserveAndTrigger(productContainer);
+             }
+        }
+    }
+
+    observeAndTriggerUpdate(productContainer) {
         if (productContainer) {
           const variantInput = productContainer.querySelector('.js-gd-ext-selected-variant-id');
           if (variantInput) {
-            let fallbackTimeout;
+            
+            if (this.currentObserver) {
+                this.currentObserver.disconnect();
+                this.currentObserver = null;
+            }
 
             const observer = new MutationObserver((mutations) => {
               mutations.forEach((mutation) => {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
                   const updatedVariantId = variantInput.value;
                   if (updatedVariantId) {
-                    const priceContainer = productContainer.querySelector("#b2b-price-container-" + blockId);
-                    if (priceContainer) {
-                        updatePriceDisplay(updatedVariantId);
-                    }
-                    if (fallbackTimeout) clearTimeout(fallbackTimeout);
+                    this.updatePriceDisplay(updatedVariantId);
                     observer.disconnect();
+                    this.currentObserver = null;
                   }
                 }
               });
             });
             
+            this.currentObserver = observer;
             observer.observe(variantInput, { attributes: true });
             
-            fallbackTimeout = setTimeout(() => {
+            setTimeout(() => {
               if(variantInput.value) {
-                const priceContainer = productContainer.querySelector("#b2b-price-container-" + blockId);
-                if (priceContainer) {
-                  updatePriceDisplay(variantInput.value);
-                }
+                this.updatePriceDisplay(variantInput.value);
               }
             }, 500);
             return;
           }
         }
         
-        if(fallbackVariantId) updatePriceDisplay(fallbackVariantId);
+        let fallbackVariantId = this.config.selectedVariantId;  
+        if(fallbackVariantId) this.updatePriceDisplay(fallbackVariantId);
     }
-
-    let currentVariantId = selectedVariantId;
-    updatePriceDisplay(currentVariantId);
-
-    // Listen for click on variant pickers
-    document.body.addEventListener('click', function(e) {
-      if (e.target.matches('.js-gd-ext-variant-picker-rb')) {
-        console.log("------>>>>heyyyy");
-         const productContainer = e.target.closest('.js-gd-ext-product-info-container');
-         const variantId = e.target.getAttribute('data-variant-id');
-         observeAndTriggerUpdate(productContainer, variantId);
-      }
-    });
-
-    // Listen for change on dropdown variant pickers
-    document.body.addEventListener('change', function(e) {
-      if (e.target.tagName === 'SELECT') {
-        const selectedOption = e.target.options[e.target.selectedIndex];
-        if (selectedOption && selectedOption.classList.contains('js-gd-ext-variant-picker-dd')) {
-          const productContainer = e.target.closest('.js-gd-ext-product-info-container');
-          const variantId = selectedOption.getAttribute('data-variant-id');
-          observeAndTriggerUpdate(productContainer, variantId);
-        }
-      }
-    });
   }
 
-  // Initialization Pattern
-  window.b2bPriceConfigs = window.b2bPriceConfigs || [];
-  window.b2bPriceConfigs.forEach(initB2BPrice);
-  
-  // Override push to capture future additions
-  const oldPush = window.b2bPriceConfigs.push;
-  window.b2bPriceConfigs.push = function(config) {
-    oldPush.call(this, config);
-    initB2BPrice(config);
-  };
-
+  customElements.define("b2b-prod-price", B2bProdPrice);
 })();
