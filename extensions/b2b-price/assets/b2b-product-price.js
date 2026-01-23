@@ -22,10 +22,6 @@
         this.visibilityObserver.disconnect();
         this.visibilityObserver = null;
       }
-      if (this.currentObserver) {
-        this.currentObserver.disconnect();
-        this.currentObserver = null;
-      }
       this.dataset.initialized = "false";
     }
 
@@ -129,11 +125,11 @@
       
       console.log('--->>>>selectedVariantId', selectedVariantId);
       if (selectedVariantId) {
-          this.updatePriceDisplay(selectedVariantId, false);
+          this.updatePriceDisplay(selectedVariantId);
       }
     }
 
-    updatePriceDisplay(variantId, stickyAddCartPresent) {
+    updatePriceDisplay(variantId) {
         if (!this.config) return;
         const { isB2B, moneyFormat, variantsData } = this.config;
         
@@ -144,9 +140,9 @@
 
         if (isB2B && data.b2b_price && data.b2b_price > 0) {
            html = `
-              <div class="b2b-price-wrapper b2b-customer-price">
-                  <span class="b2b-price-current">${this.formatMoney(data.b2b_price, moneyFormat)}</span>
-                  <span class="b2b-price-original" style="text-decoration: line-through;">
+              <div class="b2b-price-wrapper b2b-customer-price" style="display: block !important;">
+                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.b2b_price, moneyFormat)}</span>
+                  <span class="b2b-price-original" style="text-decoration: line-through; display: block !important;">
                     ${this.formatMoney(data.price, moneyFormat)}
                   </span>
               </div>
@@ -154,9 +150,9 @@
         } 
         else if (data.compare_at_price && data.compare_at_price > data.price) {
            html = `
-              <div class="b2b-price-wrapper b2b-regular-sale">
-                  <span class="b2b-price-current">${this.formatMoney(data.price, moneyFormat)}</span>
-                  <span class="b2b-price-compare" style="text-decoration: line-through;">
+              <div class="b2b-price-wrapper b2b-regular-sale" style="display: block !important;">
+                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.price, moneyFormat)}</span>
+                  <span class="b2b-price-compare" style="text-decoration: line-through; display: block !important;">
                     ${this.formatMoney(data.compare_at_price, moneyFormat)}
                   </span>
               </div>
@@ -164,8 +160,8 @@
         }
         else {
            html = `
-              <div class="b2b-price-wrapper b2b-regular-price">
-                  <span class="b2b-price-current">${this.formatMoney(data.price, moneyFormat)}</span>
+              <div class="b2b-price-wrapper b2b-regular-price" style="display: block !important;">
+                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.price, moneyFormat)}</span>
               </div>
            `;
         }
@@ -173,12 +169,6 @@
         const priceWrapper = this.querySelector('.js-b2b-price-wrapper');
         if (priceWrapper) {
             this.updateTarget(priceWrapper, html);
-        }
-        if (stickyAddCartPresent) {
-          const stickyAddCartPriceWrapper = this.closest('.js-gd-ext-pdp-info-section')?.querySelector('.js-gd-ext-sticky-add-cart .js-gd-ext-sticky-add-to-cart-price');
-          if (stickyAddCartPriceWrapper) {
-            this.updateTarget(stickyAddCartPriceWrapper, html);
-          }
         }
     }
 
@@ -197,26 +187,27 @@
         this.hasBoundEvents = false;
     }
 
-    safeObserveAndTrigger(productContainer, stickyAddCartPresent) {
+    safeObserveAndTrigger(productContainer) {
         if (!productContainer.contains(this) && productContainer !== this) {
              if (!productContainer.querySelector(`#${this.id}`)) {
                  return; 
              }
         }
-        this.observeAndTriggerUpdate(productContainer, stickyAddCartPresent);
+        this.observeAndTriggerUpdate(productContainer);
     }
 
     handleVariantChange(e) {
-        if (e.target.matches && e.target.matches('.js-gd-ext-variant-picker')) {
+        // Handle both Dropdowns and Radio Buttons with unified class name
+        console.log("Variant change detected", e.target);
+        if (e.target.matches('.js-gd-ext-variant-picker')) {
              const productContainer = e.target.closest('.js-gd-ext-product-info-container');
              if (productContainer) {
-                 const stickyAddCartPresent = !!e.target.closest('.js-gd-ext-pdp-info-section')?.querySelector('.js-gd-ext-sticky-add-cart');
-                 this.safeObserveAndTrigger(productContainer, stickyAddCartPresent);
+                 this.safeObserveAndTrigger(productContainer);
              }
         }
     }
 
-    observeAndTriggerUpdate(productContainer, stickyAddCartPresent) {
+    observeAndTriggerUpdate(productContainer) {
         if (productContainer) {
           const variantInput = productContainer.querySelector('.js-gd-ext-selected-variant-id');
           if (variantInput) {
@@ -231,7 +222,7 @@
                 if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
                   const updatedVariantId = variantInput.value;
                   if (updatedVariantId) {
-                    this.updatePriceDisplay(updatedVariantId, stickyAddCartPresent);
+                    this.updatePriceDisplay(updatedVariantId);
                     observer.disconnect();
                     this.currentObserver = null;
                   }
@@ -244,7 +235,7 @@
             
             setTimeout(() => {
               if(variantInput.value) {
-                this.updatePriceDisplay(variantInput.value, stickyAddCartPresent);
+                this.updatePriceDisplay(variantInput.value);
               }
             }, 500);
             return;
@@ -252,7 +243,7 @@
         }
         
         let fallbackVariantId = this.config.selectedVariantId;  
-        if(fallbackVariantId) this.updatePriceDisplay(fallbackVariantId, stickyAddCartPresent);
+        if(fallbackVariantId) this.updatePriceDisplay(fallbackVariantId);
     }
   }
 
