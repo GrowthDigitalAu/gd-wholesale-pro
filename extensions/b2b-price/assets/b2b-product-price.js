@@ -22,6 +22,10 @@
         this.visibilityObserver.disconnect();
         this.visibilityObserver = null;
       }
+      if (this.currentObserver) {
+        this.currentObserver.disconnect();
+        this.currentObserver = null;
+      }
       this.dataset.initialized = "false";
     }
 
