@@ -57,7 +57,7 @@
       console.log("----->>>", config);
       if (config) {
         this.config = config;
-        this.initB2BPrice(this.config);
+        this.dataset.initialized = "true";
         this.bindEvents();
       }
     }
@@ -123,16 +123,6 @@
       }
     }
 
-    initB2BPrice(config) {
-      this.dataset.initialized = "true";
-      const { selectedVariantId } = config;
-      
-      console.log('--->>>>selectedVariantId', selectedVariantId);
-      if (selectedVariantId) {
-          this.updatePriceDisplay(selectedVariantId);
-      }
-    }
-
     updatePriceDisplay(variantId) {
         if (!this.config) return;
         const { isB2B, moneyFormat, variantsData } = this.config;
@@ -144,9 +134,9 @@
 
         if (isB2B && data.b2b_price && data.b2b_price > 0) {
            html = `
-              <div class="b2b-price-wrapper b2b-customer-price" style="display: block !important;">
-                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.b2b_price, moneyFormat)}</span>
-                  <span class="b2b-price-original" style="text-decoration: line-through; display: block !important;">
+              <div class="b2b-price-wrapper b2b-customer-price">
+                  <span class="b2b-price-current">${this.formatMoney(data.b2b_price, moneyFormat)}</span>
+                  <span class="b2b-price-original" style="text-decoration: line-through;">
                     ${this.formatMoney(data.price, moneyFormat)}
                   </span>
               </div>
@@ -154,9 +144,9 @@
         } 
         else if (data.compare_at_price && data.compare_at_price > data.price) {
            html = `
-              <div class="b2b-price-wrapper b2b-regular-sale" style="display: block !important;">
-                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.price, moneyFormat)}</span>
-                  <span class="b2b-price-compare" style="text-decoration: line-through; display: block !important;">
+              <div class="b2b-price-wrapper b2b-regular-sale">
+                  <span class="b2b-price-current">${this.formatMoney(data.price, moneyFormat)}</span>
+                  <span class="b2b-price-compare" style="text-decoration: line-through;">
                     ${this.formatMoney(data.compare_at_price, moneyFormat)}
                   </span>
               </div>
@@ -164,8 +154,8 @@
         }
         else {
            html = `
-              <div class="b2b-price-wrapper b2b-regular-price" style="display: block !important;">
-                  <span class="b2b-price-current" style="display: block !important;">${this.formatMoney(data.price, moneyFormat)}</span>
+              <div class="b2b-price-wrapper b2b-regular-price">
+                  <span class="b2b-price-current">${this.formatMoney(data.price, moneyFormat)}</span>
               </div>
            `;
         }
