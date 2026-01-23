@@ -121,7 +121,7 @@ if (!customElements.get('b2b-prod-price')) {
       }
     }
 
-    updatePriceDisplay(variantId) {
+    updatePriceDisplay(variantId, stickyAddCartPresent) {
         if (!this.config) return;
         const { isB2B, moneyFormat, variantsData } = this.config;
         
@@ -162,6 +162,13 @@ if (!customElements.get('b2b-prod-price')) {
         if (priceWrapper) {
             this.updateTarget(priceWrapper, html);
         }
+
+        if (stickyAddCartPresent) {
+          const stickyAddCartPriceWrapper = this.closest('.js-gd-ext-pdp-info-section')?.querySelector('.js-gd-ext-sticky-add-cart .js-gd-ext-sticky-add-to-cart-price');
+          if (stickyAddCartPriceWrapper) {
+            this.updateTarget(stickyAddCartPriceWrapper, html);
+          }
+        }
     }
 
     bindEvents() {
@@ -179,27 +186,27 @@ if (!customElements.get('b2b-prod-price')) {
         this.hasBoundEvents = false;
     }
 
-    safeObserveAndTrigger(productContainer) {
+    safeObserveAndTrigger(productContainer, stickyAddCartPresent) {
         if (!productContainer.contains(this) && productContainer !== this) {
              if (!productContainer.querySelector(`#${this.id}`)) {
                  return; 
              }
         }
-        this.observeAndTriggerUpdate(productContainer);
+        this.observeAndTriggerUpdate(productContainer, stickyAddCartPresent);
     }
 
     handleVariantChange(e) {
-        // Handle both Dropdowns and Radio Buttons with unified class name
         console.log("Variant change detected", e.target);
         if (e.target.matches('.js-gd-ext-variant-picker')) {
              const productContainer = e.target.closest('.js-gd-ext-product-info-container');
              if (productContainer) {
-                 this.safeObserveAndTrigger(productContainer);
+                const stickyAddCartPresent = !!e.target.closest('.js-gd-ext-pdp-info-section')?.querySelector('.js-gd-ext-sticky-add-to-cart-price');
+                this.safeObserveAndTrigger(productContainer, stickyAddCartPresent);
              }
         }
     }
 
-    observeAndTriggerUpdate(productContainer) {
+    observeAndTriggerUpdate(productContainer, stickyAddCartPresent) {
         if (productContainer) {
           const variantInput = productContainer.querySelector('.js-gd-ext-selected-variant-id');
           if (variantInput) {
@@ -214,7 +221,7 @@ if (!customElements.get('b2b-prod-price')) {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
                   const updatedVariantId = variantInput.value;
                   if (updatedVariantId) {
-                    this.updatePriceDisplay(updatedVariantId);
+                    this.updatePriceDisplay(updatedVariantId, stickyAddCartPresent);
                     observer.disconnect();
                     this.currentObserver = null;
                   }
@@ -227,7 +234,7 @@ if (!customElements.get('b2b-prod-price')) {
             
             setTimeout(() => {
               if(variantInput.value) {
-                this.updatePriceDisplay(variantInput.value);
+                this.updatePriceDisplay(variantInput.value, stickyAddCartPresent);
               }
             }, 500);
             return;
@@ -235,7 +242,7 @@ if (!customElements.get('b2b-prod-price')) {
         }
         
         let fallbackVariantId = this.config.selectedVariantId;  
-        if(fallbackVariantId) this.updatePriceDisplay(fallbackVariantId);
+        if(fallbackVariantId) this.updatePriceDisplay(fallbackVariantId, stickyAddCartPresent);
     }
   }
   customElements.define("b2b-prod-price", B2bProdPrice);
