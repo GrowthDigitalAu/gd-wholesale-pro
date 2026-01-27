@@ -2,7 +2,7 @@
 
 client_id = "e5c4c7ddfaddf3322cef406b333dfcd3"
 name = "GD Wholesale Pro"
-application_url = "https://gd-wholesale-pro.onrender.com"
+application_url = "https://gd-wholesale-pro.onrender.com/"
 embedded = true
 
 [build]
