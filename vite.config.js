@@ -66,6 +66,7 @@ export default defineConfig({
       "@dnd-kit/sortable",
       "@dnd-kit/utilities",
       "exceljs",
+      "uuid",
     ],
   },
 });
