@@ -1,8 +1,30 @@
+<script src="{{ 'b2b-product-price.js' | asset_url }}" defer="defer"></script>
+{% if block.settings.enable_card_price_script %}
+  <script src="{{ 'b2b-card-price.js' | asset_url }}" defer="defer"></script>
+{% endif %}
+
+<style>
+  .js-gd-ext-card-price {
+    display: flex;
+    gap: 10px;
+  }
+</style>
+
 {% schema %}
 {
   "name": "B2B Product Card Price",
   "target": "body",
-  "javascript": "b2b-product-price.js",
-  "settings": []
+  "settings": [
+    {
+      "type": "header",
+      "content": "For Non Block Structured Themes Only"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_card_price_script",
+      "label": "Enable Card Price Script",
+      "default": false
+    }
+  ]
 }
 {% endschema %}
