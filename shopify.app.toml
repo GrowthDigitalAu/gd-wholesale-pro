@@ -2,7 +2,7 @@
 
 client_id = "e5c4c7ddfaddf3322cef406b333dfcd3"
 name = "GD Wholesale Pro"
-application_url = "https://gd-priceupdator-pro.onrender.com"
+application_url = "https://gd-wholesale-pro.onrender.com"
 embedded = true
 
 [build]
@@ -25,12 +25,12 @@ scopes = "write_products,read_products, read_discounts, write_discounts, read_cu
 
 [auth]
 redirect_urls = [
-    "https://gd-priceupdator-pro.onrender.com/auth/callback",
-    "https://gd-priceupdator-pro.onrender.com/auth/shopify/callback",
-    "https://gd-priceupdator-pro.onrender.com/api/auth/callback"
+    "https://gd-wholesale-pro.onrender.com/auth/callback",
+    "https://gd-wholesale-pro.onrender.com/auth/shopify/callback",
+    "https://gd-wholesale-pro.onrender.com/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://gd-priceupdator-pro.onrender.com/api"
+url = "https://gd-wholesale-pro.onrender.com/api"
 subpath = "proxy"
 prefix = "apps"
