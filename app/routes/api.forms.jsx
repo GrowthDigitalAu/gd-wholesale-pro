@@ -1,4 +1,3 @@
-import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
 // CORS Headers for storefront access
