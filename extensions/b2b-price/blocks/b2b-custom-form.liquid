@@ -27,10 +27,26 @@
       "step": 5,
       "label": "Section Padding",
       "default": 40
+    },
+    {
+      "type": "textarea",
+      "id": "custom_css",
+      "label": "Custom CSS",
+      "info": "Add custom CSS to override form styles."
     }
   ]
 }
 {% endschema %}
+
+{{ 'custom-form.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.custom_css != blank %}
+  <style>
+    {{ block.settings.custom_css }}
+  </style>
+{% endif %}
+<script src="{{ 'country-codes.js' | asset_url }}" defer></script>
+<script src="{{ 'custom-form.js' | asset_url }}" defer></script>
 
 <div
   id="gd-custom-form-{{ block.id }}"
@@ -39,10 +55,6 @@
 >
   <div class="gd-form-loading">Loading form...</div>
 </div>
-
-{{ 'custom-form.css' | asset_url | stylesheet_tag }}
-<script src="{{ 'country-codes.js' | asset_url }}" defer></script>
-<script src="{{ 'custom-form.js' | asset_url }}" defer></script>
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
