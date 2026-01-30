@@ -254,7 +254,8 @@ export default function ExportProductData() {
                             });
                         }
                         
-                        const b2bPrice = obj.metafield?.value ? parseFloat(obj.metafield.value) : null;
+                        let b2bPrice = obj.metafield?.value ? parseFloat(obj.metafield.value) : null;
+                        if (b2bPrice === 0) b2bPrice = null; // Export as empty cell if 0
 
                         rows.push({
                             "Product Title": product?.title || "Unknown",
