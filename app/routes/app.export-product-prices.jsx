@@ -54,30 +54,36 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
 
-    // 1. Cancel existing operation if any
-    const currentOpResponse = await admin.graphql(
-        `#graphql
-        query {
-            currentBulkOperation {
-                id
-                status
-            }
-        }`
-    );
-    const currentOpData = await currentOpResponse.json();
-    const currentOp = currentOpData.data?.currentBulkOperation;
-
-    if (currentOp && currentOp.status !== "COMPLETED") {
-         await admin.graphql(
+    // 1. Cancel existing operation if any (skip if this fails)
+    try {
+        const currentOpResponse = await admin.graphql(
             `#graphql
-            mutation {
-                bulkOperationCancel(id: "${currentOp.id}") {
-                    bulkOperation { status }
-                    userErrors { field message }
+            query {
+                currentBulkOperation {
+                    id
+                    status
                 }
             }`
         );
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const currentOpData = await currentOpResponse.json();
+        const currentOp = currentOpData.data?.currentBulkOperation;
+
+        if (currentOp && currentOp.status !== "COMPLETED") {
+             await admin.graphql(
+                `#graphql
+                mutation {
+                    bulkOperationCancel(id: "${currentOp.id}") {
+                        bulkOperation { status }
+                        userErrors { field message }
+                    }
+                }`
+            );
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    } catch (error) {
+        console.error("Failed to check/cancel existing bulk operation:", error.message);
+        console.log("Continuing with export anyway...");
+        // Continue anyway - don't block the export
     }
 
     // 2. Run new operation
