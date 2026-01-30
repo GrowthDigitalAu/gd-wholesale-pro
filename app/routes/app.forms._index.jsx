@@ -367,7 +367,7 @@ export default function Forms() {
 
   return (
     <s-page>
-      <TitleBar title="Custom Forms" />
+      <TitleBar title="Custom Form" />
       <s-box paddingBlockStart="large">
         <s-section>
           {forms.length === 0 ? (
