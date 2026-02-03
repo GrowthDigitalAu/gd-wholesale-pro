@@ -31,7 +31,37 @@ const formatPhoneNumber = (rawPhone) => {
 
 export const loader = async ({ request }) => {
   try {
-    const { session } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
+    
+    // Check for active subscription to prevent slow DB loading for unbilled users
+    const billingCheck = await admin.graphql(
+      `#graphql
+        query {
+          currentAppInstallation {
+            activeSubscriptions {
+              id
+              status
+              test
+            }
+          }
+        }
+      `
+    );
+
+    const billingJson = await billingCheck.json();
+    const activeSubscriptions =
+      billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+
+    if (activeSubscriptions.length < 1) {
+       return { 
+          forms: [], 
+          recentSubmissions: [], 
+          pagination: { currentPage: 1, totalPages: 1, totalCount: 0, hasNextPage: false, hasPreviousPage: false }, 
+          activeTab: "all", 
+          totalSubmissionsCount: 0 
+       };
+    }
+
     const forms = await db.form.findMany({
       where: { shop: session.shop },
       orderBy: { createdAt: "desc" },
