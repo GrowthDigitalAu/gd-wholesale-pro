@@ -109,7 +109,7 @@ export const action = async ({ request }) => {
                                             }
                                             price
                                             compareAtPrice
-                                            metafield(namespace: "app", key: "gd_b2b_price") {
+                                            metafield(namespace: "$app", key: "gd_b2b_price") {
                                                 value
                                             }
                                         }

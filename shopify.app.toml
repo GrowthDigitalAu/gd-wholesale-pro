@@ -38,3 +38,8 @@ redirect_urls = [
 url = "https://gd-wholesale-pro.onrender.com/api"
 subpath = "proxy"
 prefix = "apps"
+
+[variant.metafields.app.gd_b2b_price]
+type = "number_decimal"
+name = "GD B2B Price"
+access.admin = "merchant_read"

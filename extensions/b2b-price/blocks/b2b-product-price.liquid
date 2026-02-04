@@ -11,7 +11,7 @@
   <b2b-prod-price id="b2b-price-container-{{ block.id }}" class="js-gd-ext-b2b-price-block">
     <div class="js-b2b-price-wrapper">
       {% assign current_variant = selected_product.selected_or_first_available_variant %}
-      {% assign b2b_price = current_variant.metafields.app.gd_b2b_price.value | times: 100 %}
+      {% assign b2b_price = current_variant.metafields['$app'].gd_b2b_price.value | times: 100 %}
 
       {% if has_b2b_tag and b2b_price > 0 %}
         <div class="b2b-price-wrapper b2b-customer-price">
@@ -43,7 +43,7 @@
             "{{ variant.id }}": {
               "price": {{ variant.price }},
               "compare_at_price": {% if variant.compare_at_price %}{{ variant.compare_at_price }}{% else %}null{% endif %},
-              "b2b_price": {% if variant.metafields.app.gd_b2b_price.value %}{{ variant.metafields.app.gd_b2b_price.value | times: 100 }}{% else %}null{% endif %}
+              "b2b_price": {% if variant.metafields["$app"].gd_b2b_price.value %}{{ variant.metafields["$app"].gd_b2b_price.value | times: 100 }}{% else %}null{% endif %}
             }{% unless forloop.last %},{% endunless %}
           {% endfor %}
         },
