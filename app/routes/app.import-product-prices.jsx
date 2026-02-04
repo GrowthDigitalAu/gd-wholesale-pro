@@ -125,7 +125,7 @@ export const action = async ({ request }) => {
                         sku
                         price
                         compareAtPrice
-                        metafield(namespace: "app", key: "original_price") {
+                        metafield(namespace: "app", key: "gd_b2b_price") {
                             id
                             value
                         }
@@ -268,7 +268,7 @@ export const action = async ({ request }) => {
                 } else {
                     variantInput.metafields = [{
                         namespace: "app",
-                        key: "original_price",
+                        key: "gd_b2b_price",
                         value: String(newB2BPrice),
                         type: "number_decimal"
                     }];
