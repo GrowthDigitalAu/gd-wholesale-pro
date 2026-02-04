@@ -58,7 +58,7 @@ export const loader = async ({ request }) => {
                                     sku
                                     price
                                     displayName
-                                    metafield(namespace: "app", key: "original_price") {
+                                    metafield(namespace: "app", key: "gd_b2b_price") {
                                         value
                                     }
                                 }
@@ -130,7 +130,7 @@ export const action = async ({ request }) => {
                             {
                                 ownerId: update.variantId,
                                 namespace: "app",
-                                key: "original_price",
+                                key: "gd_b2b_price",
                                 value: valueToSet,
                                 type: "number_decimal"
                             }
