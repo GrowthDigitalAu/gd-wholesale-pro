@@ -125,7 +125,7 @@ export default function SubscriptionPage() {
   const navigation = useNavigation();
   const [modalOpen, setModalOpen] = useState(false);
 
-  const isSubmitting = navigation.state === "submitting" || navigation.state === "loading";
+  const isSubmitting = navigation.state === "submitting";
 
   const handleCancel = () => {
     setModalOpen(true);

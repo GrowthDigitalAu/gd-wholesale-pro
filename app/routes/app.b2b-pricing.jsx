@@ -360,7 +360,6 @@ export default function B2BPricing() {
     const [searchTerm, setSearchTerm] = useState(searchParams.get("query") || "");
 
     const isSaving = fetcher.state !== "idle";
-    const isNavigating = navigation.state !== "idle" && navigation.location?.pathname === "/app/subscription";
 
 
     useEffect(() => {
@@ -602,7 +601,6 @@ export default function B2BPricing() {
                                     onClick={() => navigate('/app/subscription')} 
                                     variant="primary" 
                                     size="slim"
-                                    loading={isNavigating}
                                 >
                                     Upgrade Plan
                                 </s-button>
