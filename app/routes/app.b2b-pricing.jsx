@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Pagination, Banner } from "@shopify/polaris";
-
+import { Pagination, Banner, InlineStack, Text, BlockStack } from "@shopify/polaris";
+import { getVariantLimitForPlan } from "../utils/subscription";
 
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
@@ -12,6 +12,26 @@ export const loader = async ({ request }) => {
     const direction = url.searchParams.get("direction");
     const rawQuery = url.searchParams.get("query") || "";
     const query = rawQuery ? `(title:*${rawQuery}* OR sku:*${rawQuery}*)` : "";
+
+    // Fetch subscription information
+    const billingCheck = await admin.graphql(
+        `#graphql
+        query {
+            currentAppInstallation {
+                activeSubscriptions {
+                    id
+                    name
+                    status
+                }
+            }
+        }`
+    );
+
+    const billingJson = await billingCheck.json();
+    const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+    const subscription = activeSubscriptions[0] || null;
+    const planName = subscription?.name || null;
+    const variantLimit = getVariantLimitForPlan(planName);
 
     let queryVariables = {
         first: 10,
@@ -93,7 +113,58 @@ export const loader = async ({ request }) => {
         });
     });
 
-    return { products, pageInfo, totalCount, initialAdjustments };
+    // Count ALL variants with B2B prices set (not just current page)
+    const countResponse = await admin.graphql(
+        `#graphql
+        query {
+            products(first: 250) {
+                edges {
+                    node {
+                        variants(first: 100) {
+                            edges {
+                                node {
+                                    id
+                                    metafield(namespace: "$app", key: "gd_b2b_price") {
+                                        value
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                }
+            }
+        }`
+    );
+
+    const countJson = await countResponse.json();
+    let currentB2BCount = 0;
+    
+    countJson.data?.products?.edges.forEach(({ node: product }) => {
+        product.variants.edges.forEach(({ node: variant }) => {
+            if (variant.metafield?.value) {
+                currentB2BCount++;
+            }
+        });
+    });
+
+    // Note: This is a simplified count that fetches first 250 products.
+    // For shops with more products, you'd need pagination logic here.
+    // For now, this should work for most use cases.
+
+    return { 
+        products, 
+        pageInfo, 
+        totalCount, 
+        initialAdjustments,
+        subscription: {
+            planName: planName || "Free",
+            variantLimit,
+            currentUsage: currentB2BCount
+        }
+    };
 };
 
 export const action = async ({ request }) => {
@@ -104,60 +175,236 @@ export const action = async ({ request }) => {
     if (bulkUpdates) {
         const updates = JSON.parse(bulkUpdates);
 
-        // Process updates and deletions
-        for (const update of updates) {
-            // Sync to Shopify Metafield (No DB)
-            const valueToSet = (update.adjustment === '' || update.adjustment === null) ? null : String(update.adjustment);
-
-            await admin.graphql(
-                `#graphql
-                mutation metaFieldSet($metafields: [MetafieldsSetInput!]!) {
-                    metafieldsSet(metafields: $metafields) {
-                        metafields {
-                            id
-                            key
-                            value
-                        }
-                        userErrors {
-                            field
-                            message
-                        }
-                    }
-                }`,
-                {
-                    variables: {
-                        metafields: [
-                            {
-                                ownerId: update.variantId,
-                                namespace: "$app",
-                                key: "gd_b2b_price",
-                                value: valueToSet,
-                                type: "number_decimal"
-                            }
-                        ]
+        // Fetch subscription info for limit checking
+        const billingCheck = await admin.graphql(
+            `#graphql
+            query {
+                currentAppInstallation {
+                    activeSubscriptions {
+                        name
                     }
                 }
-            );
+            }`
+        );
+
+        const billingJson = await billingCheck.json();
+        const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+        const planName = activeSubscriptions[0]?.name || null;
+        const variantLimit = getVariantLimitForPlan(planName);
+
+        // Count current B2B variants
+        const countResponse = await admin.graphql(
+            `#graphql
+            query {
+                products(first: 250) {
+                    edges {
+                        node {
+                            variants(first: 100) {
+                                edges {
+                                    node {
+                                        id
+                                        metafield(namespace: "$app", key: "gd_b2b_price") {
+                                            value
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }`
+        );
+
+        const countJson = await countResponse.json();
+        const currentVariantsWithB2B = new Set();
+        
+        countJson.data?.products?.edges.forEach(({ node: product }) => {
+            product.variants.edges.forEach(({ node: variant }) => {
+                if (variant.metafield?.value) {
+                    currentVariantsWithB2B.add(variant.id);
+                }
+            });
+        });
+
+        // Separate updates into deletions, updates, and additions
+        const deletions = [];
+        const modifications = [];
+        const additions = [];
+        
+        updates.forEach(update => {
+            const valueToSet = (update.adjustment === '' || update.adjustment === null) ? null : String(update.adjustment);
+            const isCurrentlySet = currentVariantsWithB2B.has(update.variantId);
+            
+            if (valueToSet === null && isCurrentlySet) {
+                // Deletion: removing existing B2B price
+                deletions.push(update);
+            } else if (valueToSet !== null && isCurrentlySet) {
+                // Modification: updating existing B2B price
+                modifications.push(update);
+            } else if (valueToSet !== null && !isCurrentlySet) {
+                // Addition: adding new B2B price
+                additions.push(update);
+            }
+        });
+
+        // Calculate available slots for new additions
+        let currentCount = currentVariantsWithB2B.size;
+        const slotsFreedByDeletions = deletions.length;
+        const availableSlots = variantLimit !== null 
+            ? Math.max(0, variantLimit - currentCount + slotsFreedByDeletions)
+            : Infinity;
+
+        // Determine which additions can be processed (already sorted by timestamp from client)
+        const additionsToProcess = variantLimit !== null 
+            ? additions.slice(0, availableSlots)
+            : additions;
+        const skippedAdditions = variantLimit !== null 
+            ? additions.slice(availableSlots)
+            : [];
+
+        // Process all operations
+        const processedUpdates = [...deletions, ...modifications, ...additionsToProcess];
+        const skippedVariantIds = skippedAdditions.map(u => u.variantId);
+
+        // Execute GraphQL mutations
+        for (const update of processedUpdates) {
+            const valueToSet = (update.adjustment === '' || update.adjustment === null) ? null : String(update.adjustment);
+
+            if (valueToSet === null) {
+                // Delete the metafield
+                await admin.graphql(
+                    `#graphql
+                    mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+                        metafieldsDelete(metafields: $metafields) {
+                            deletedMetafields {
+                                key
+                                namespace
+                                ownerId
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }`,
+                    {
+                        variables: {
+                            metafields: [
+                                {
+                                    ownerId: update.variantId,
+                                    namespace: "$app",
+                                    key: "gd_b2b_price"
+                                }
+                            ]
+                        }
+                    }
+                );
+            } else {
+                // Set/Update the metafield
+                await admin.graphql(
+                    `#graphql
+                    mutation metaFieldSet($metafields: [MetafieldsSetInput!]!) {
+                        metafieldsSet(metafields: $metafields) {
+                            metafields {
+                                id
+                                key
+                                value
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }`,
+                    {
+                        variables: {
+                            metafields: [
+                                {
+                                    ownerId: update.variantId,
+                                    namespace: "$app",
+                                    key: "gd_b2b_price",
+                                    value: valueToSet,
+                                    type: "number_decimal"
+                                }
+                            ]
+                        }
+                    }
+                );
+            }
         }
-        return { success: true, count: updates.length };
+
+        return { 
+            success: true, 
+            saved: processedUpdates.length,
+            skipped: skippedAdditions.length,
+            skippedVariantIds: skippedVariantIds
+        };
     }
 
     return { success: true };
 };
 
 export default function B2BPricing() {
-    const { products, pageInfo, totalCount, initialAdjustments } = useLoaderData();
+    const { products, pageInfo, totalCount, initialAdjustments, subscription } = useLoaderData();
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [priceAdjustments, setPriceAdjustments] = useState(initialAdjustments || {});
     const [selectedVariants, setSelectedVariants] = useState({});
+    const [isStylesLoaded, setIsStylesLoaded] = useState(false);
+    const [priceEntryTimestamps, setPriceEntryTimestamps] = useState({});
 
     // Initialize searchTerm from URL param
     const [searchTerm, setSearchTerm] = useState(searchParams.get("query") || "");
 
     const isSaving = fetcher.state !== "idle";
+
+    // Wait for styles to load before showing Banner to prevent icon flash
+    useEffect(() => {
+        // Small delay to ensure Polaris CSS is loaded
+        const timer = setTimeout(() => {
+            setIsStylesLoaded(true);
+        }, 100);
+        return () => clearTimeout(timer);
+    }, []);
+
+    // Handle successful save with toast and clear unsaved fields
+    useEffect(() => {
+        if (fetcher.data?.success) {
+            const { saved, skipped, skippedVariantIds } = fetcher.data;
+            
+            if (skipped > 0) {
+                shopify.toast.show(`${saved} variant(s) saved. ${skipped} variant(s) skipped due to plan limit reached.`, { isError: true });
+                
+                // Clear the skipped fields from state
+                if (skippedVariantIds && skippedVariantIds.length > 0) {
+                    setPriceAdjustments(prev => {
+                        const updated = { ...prev };
+                        skippedVariantIds.forEach(id => {
+                            delete updated[id];
+                        });
+                        return updated;
+                    });
+                    
+                    // Also clear timestamps for skipped variants
+                    setPriceEntryTimestamps(prev => {
+                        const updated = { ...prev };
+                        skippedVariantIds.forEach(id => {
+                            delete updated[id];
+                        });
+                        return updated;
+                    });
+                }
+            } else {
+                shopify.toast.show(`Successfully updated ${saved} variant(s)`);
+            }
+        }
+        if (fetcher.data?.error) {
+            shopify.toast.show("Limit reached. Upgrade your plan.", { isError: true });
+        }
+    }, [fetcher.data, shopify]);
+
 
     // Sync state with loader data when it changes (pagination/search)
     useEffect(() => {
@@ -205,6 +452,14 @@ export default function B2BPricing() {
                 ...prev,
                 [variantId]: value
             }));
+            
+            // Track timestamp when user enters/changes a value
+            if (value !== '') {
+                setPriceEntryTimestamps(prev => ({
+                    ...prev,
+                    [variantId]: Date.now()
+                }));
+            }
         }
     };
 
@@ -303,13 +558,17 @@ export default function B2BPricing() {
                 if (hasChanged) {
                     updates.push({
                         variantId: variant.id,
-                        adjustment: currentVal // Pass the raw string/value to action
+                        adjustment: currentVal, // Pass the raw string/value to action
+                        timestamp: priceEntryTimestamps[variant.id] || 0 // Include timestamp for priority
                     });
                 }
             });
         });
 
         if (updates.length > 0) {
+            // Sort updates by timestamp (oldest first = highest priority)
+            updates.sort((a, b) => a.timestamp - b.timestamp);
+            
             fetcher.submit(
                 { bulkUpdates: JSON.stringify(updates) },
                 { method: "POST" }
@@ -321,6 +580,43 @@ export default function B2BPricing() {
 
     return (
         <s-page heading="B2B Pricing">
+            {isStylesLoaded && subscription.variantLimit !== null && subscription.currentUsage >= subscription.variantLimit - 3 && (
+                <s-box paddingBlockStart="large">
+                    <Banner
+                        tone={
+                            subscription.currentUsage >= subscription.variantLimit 
+                                ? "critical" 
+                                : "warning"
+                        }
+                    >
+                        <InlineStack align="space-between" blockAlign="center">
+                            <InlineStack gap="200" blockAlign="center">
+                                <Text as="span" fontWeight="semibold">
+                                    Plan: {subscription.planName}
+                                </Text>
+                                <Text as="span" variant="bodyMd">
+                                    B2B Variants: {subscription.currentUsage}
+                                    {subscription.variantLimit !== null ? `/${subscription.variantLimit}` : '/Unlimited'}
+                                </Text>
+                                {subscription.currentUsage >= subscription.variantLimit && (
+                                    <Text as="span" variant="bodyMd" tone="critical">
+                                        You've reached your limit
+                                    </Text>
+                                )}
+                            </InlineStack>
+                            {subscription.variantLimit !== null && (
+                                <s-button 
+                                    url="/app/subscription" 
+                                    variant="primary" 
+                                    size="slim"
+                                >
+                                    Upgrade Plan
+                                </s-button>
+                            )}
+                        </InlineStack>
+                    </Banner>
+                </s-box>
+            )}
             <s-box paddingBlockStart="large" paddingBlockEnd="large">
                 <s-section>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
