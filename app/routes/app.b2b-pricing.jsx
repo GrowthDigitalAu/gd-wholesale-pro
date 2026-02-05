@@ -219,7 +219,8 @@ export const action = async ({ request }) => {
         
         countJson.data?.products?.edges.forEach(({ node: product }) => {
             product.variants.edges.forEach(({ node: variant }) => {
-                if (variant.metafield?.value) {
+                const b2bValue = variant.metafield?.value;
+                if (b2bValue !== undefined && b2bValue !== null && parseFloat(b2bValue) > 0) {
                     currentVariantsWithB2B.add(variant.id);
                 }
             });
@@ -232,16 +233,16 @@ export const action = async ({ request }) => {
         
         updates.forEach(update => {
             const valueToSet = (update.adjustment === '' || update.adjustment === null) ? null : String(update.adjustment);
+            const numericValue = valueToSet !== null ? parseFloat(valueToSet) : 0;
             const isCurrentlySet = currentVariantsWithB2B.has(update.variantId);
             
-            if (valueToSet === null && isCurrentlySet) {
-
-                deletions.push(update);
-            } else if (valueToSet !== null && isCurrentlySet) {
-
+            if (valueToSet === null || numericValue <= 0) {
+                if (isCurrentlySet) {
+                    deletions.push(update);
+                }
+            } else if (numericValue > 0 && isCurrentlySet) {
                 modifications.push(update);
-            } else if (valueToSet !== null && !isCurrentlySet) {
-
+            } else if (numericValue > 0 && !isCurrentlySet) {
                 additions.push(update);
             }
         });
