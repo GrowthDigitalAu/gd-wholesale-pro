@@ -341,6 +341,8 @@ export const action = async ({ request }) => {
                 continue;
             }
 
+            let b2bLimitReached = false;
+
             if (b2bUpdated) {
                 const oldB2BPrice = variantData.b2bPrice;
                 const isAddingMeaningfulB2BPrice = (oldB2BPrice === null || oldB2BPrice <= 0) && newB2BPrice > 0;
@@ -354,30 +356,54 @@ export const action = async ({ request }) => {
                     const availableSlots = variantLimit - currentB2BCount;
                     
                     if (availableSlots <= 0) {
-                        results.errors.push(`SKU ${sku}: Plan limit reached. Your ${planName || 'Free'} plan allows ${variantLimit} variants with B2B prices.`);
-                        results.failedRows.push(normalizeRow(row, { "Error Reason": 'Plan limit reached' }));
+                        // Limit reached - remove B2B price from update but continue with other prices
+                        b2bLimitReached = true;
+                        delete variantInput.metafields;
+                        b2bUpdated = false; // Mark as not updated
                         results.limitReachedCount++;
-                        continue;
+                    } else {
+                        currentB2BCount++;
                     }
-                    
-                    currentB2BCount++;
+                } else if (!isAddingMeaningfulB2BPrice && !isRemovingMeaningfulB2BPrice) {
+                    // Just updating existing B2B price value, no limit check needed
                 }
+            }
+
+            // Check if we still have any updates after potentially removing B2B
+            const hasRemainingUpdates = priceUpdated || compareAtUpdated || b2bUpdated;
+            
+            if (!hasRemainingUpdates && b2bLimitReached) {
+                // Only B2B was being updated and it was blocked by limit
+                results.errors.push(`SKU ${sku}: B2B Price limit reached. Your ${planName || 'Free'} plan allows ${variantLimit} variants with B2B prices.`);
+                results.failedRows.push(normalizeRow(row, { "Error Reason": 'B2B Price limit reached' }));
+                continue;
             }
 
             if (priceUpdated) results.updatedPrice++;
             if (compareAtUpdated) results.updatedCompareAt++;
             if (b2bUpdated) results.updatedB2B++;
 
-            // Track which columns were updated for this row
-            const updatedColumns = [];
-            if (priceUpdated) updatedColumns.push('Price');
-            if (compareAtUpdated) updatedColumns.push('CompareAt Price');
-            if (b2bUpdated) updatedColumns.push('B2B Price');
+            // Add to updated rows with old values
+            const oldValues = {
+                "Old Price": priceUpdated ? (variantData.price || '-') : 'Same',
+                "Old CompareAt Price": compareAtUpdated ? (variantData.compareAtPrice || '-') : 'Same',
+                "Old B2B Price": b2bUpdated ? (variantData.b2bPrice || '-') : (b2bLimitReached ? 'Limit Reached' : 'Same')
+            };
             
-            // Add to updated rows with reason
-            results.updatedRows.push(normalizeRow(row, { 
-                "Reason": `Updated: ${updatedColumns.join(', ')}` 
-            }));
+            results.updatedRows.push(normalizeRow(row, oldValues));
+
+            // If B2B was blocked, also add to failed rows with detailed message
+            if (b2bLimitReached) {
+                const successfulUpdates = [];
+                if (priceUpdated) successfulUpdates.push('Price updated');
+                if (compareAtUpdated) successfulUpdates.push('CompareAt Price updated');
+                
+                const failReason = successfulUpdates.length > 0 
+                    ? `${successfulUpdates.join(', ')}, but B2B Price limit reached`
+                    : 'B2B Price limit reached';
+                
+                results.failedRows.push(normalizeRow(row, { "Error Reason": failReason }));
+            }
 
             bulkUpdates.push({
                 productId: variantData.productId,
