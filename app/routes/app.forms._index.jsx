@@ -342,6 +342,7 @@ export default function Forms() {
   const navigation = useNavigation();
   const actionData = useActionData();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [editingFormId, setEditingFormId] = useState(null);
 
   useEffect(() => {
     if (actionData) {
@@ -352,6 +353,13 @@ export default function Forms() {
       }
     }
   }, [actionData]);
+
+  // Reset editing state when navigation completes
+  useEffect(() => {
+    if (navigation.state === 'idle') {
+      setEditingFormId(null);
+    }
+  }, [navigation.state]);
 
   const startItem = (pagination.currentPage - 1) * 10 + 1;
   const endItem = Math.min(startItem + recentSubmissions.length - 1, pagination.totalCount);
@@ -437,7 +445,15 @@ export default function Forms() {
                       </s-paragraph>
                     </s-stack>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <s-button onClick={() => navigate(`/app/forms/${item.id}`)}>Edit</s-button>
+                      <s-button 
+                        loading={editingFormId === item.id}
+                        onClick={() => {
+                          setEditingFormId(item.id);
+                          navigate(`/app/forms/${item.id}`);
+                        }}
+                      >
+                        Edit
+                      </s-button>
                       <s-button tone="critical" onClick={() => handleDelete(item.id)}>Delete</s-button>
                     </div>
                   </div>

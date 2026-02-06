@@ -457,6 +457,7 @@ export default function FormEditor() {
   const navigation = useNavigation();
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
+  const [isNavigatingToSubmissions, setIsNavigatingToSubmissions] = useState(false);
 
   const [title, setTitle] = useState(form?.title || "Contact Us");
   const [fields, setFields] = useState(form ? JSON.parse(form.fields) : []);
@@ -583,6 +584,13 @@ export default function FormEditor() {
     }
   }, [actionData]);
 
+  // Reset navigation state when navigation completes
+  useEffect(() => {
+    if (navigation.state === 'idle') {
+      setIsNavigatingToSubmissions(false);
+    }
+  }, [navigation.state]);
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     shopify.toast.show("Copied to clipboard");
@@ -595,7 +603,15 @@ export default function FormEditor() {
           {isSaving ? "Saving..." : "Save"}
         </button>
         {form && (
-          <button onClick={() => navigate('/app/forms')}>View Submissions</button>
+          <button 
+            loading={isNavigatingToSubmissions ? "" : undefined}
+            onClick={() => {
+              setIsNavigatingToSubmissions(true);
+              navigate('/app/forms');
+            }}
+          >
+            View Submissions
+          </button>
         )}
       </TitleBar>
       <Layout>
