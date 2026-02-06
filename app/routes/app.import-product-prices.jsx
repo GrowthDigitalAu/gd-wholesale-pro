@@ -84,6 +84,7 @@ export const action = async ({ request }) => {
         errors: [],
         failedRows: [],
         skippedRows: [],
+        updatedRows: [],
         limitReachedCount: 0,
         bulkOperationId: null
     };
@@ -367,6 +368,17 @@ export const action = async ({ request }) => {
             if (compareAtUpdated) results.updatedCompareAt++;
             if (b2bUpdated) results.updatedB2B++;
 
+            // Track which columns were updated for this row
+            const updatedColumns = [];
+            if (priceUpdated) updatedColumns.push('Price');
+            if (compareAtUpdated) updatedColumns.push('CompareAt Price');
+            if (b2bUpdated) updatedColumns.push('B2B Price');
+            
+            // Add to updated rows with reason
+            results.updatedRows.push(normalizeRow(row, { 
+                "Reason": `Updated: ${updatedColumns.join(', ')}` 
+            }));
+
             bulkUpdates.push({
                 productId: variantData.productId,
                 variantInput: variantInput
@@ -496,6 +508,8 @@ export default function ImportProductPrices() {
     const failedRowsPerPage = 10;
     const [skippedPage, setSkippedPage] = useState(1);
     const skippedRowsPerPage = 10;
+    const [updatedPage, setUpdatedPage] = useState(1);
+    const updatedRowsPerPage = 10;
 
     const isLoading = fetcher.state === "submitting" || fetcher.state === "loading";
 
@@ -505,6 +519,7 @@ export default function ImportProductPrices() {
             setFile(selectedFile);
             setFailedPage(1);
             setSkippedPage(1);
+            setUpdatedPage(1);
             setValidatedResults(null); 
             setFinalResults(null);
 
@@ -689,6 +704,43 @@ export default function ImportProductPrices() {
                             </s-stack>
                         </s-section>
                     </s-box>
+
+                    {displayResults.updatedRows?.length > 0 && (
+                        <s-box paddingBlockStart="large">
+                            <s-section heading={`✅ Updated Rows (${displayResults.updatedRows.length})`}>
+                                <s-table>
+                                    <s-table-header-row>
+                                        {Object.keys(displayResults.updatedRows[0] || {}).map((key) => (
+                                            <s-table-header key={key}>{key}</s-table-header>
+                                        ))}
+                                    </s-table-header-row>
+                                    <s-table-body>
+                                        {displayResults.updatedRows
+                                            .slice((updatedPage - 1) * updatedRowsPerPage, updatedPage * updatedRowsPerPage)
+                                            .map((row, index) => (
+                                                <s-table-row key={index}>
+                                                    {Object.keys(displayResults.updatedRows[0] || {}).map((key, cellIndex) => (
+                                                        <s-table-cell key={cellIndex}>
+                                                            {row[key]?.toString() || '-'}
+                                                        </s-table-cell>
+                                                    ))}
+                                                </s-table-row>
+                                            ))}
+                                    </s-table-body>
+                                </s-table>
+                                {displayResults.updatedRows.length > updatedRowsPerPage && (
+                                    <Pagination
+                                        hasPrevious={updatedPage > 1}
+                                        onPrevious={() => setUpdatedPage(updatedPage - 1)}
+                                        hasNext={updatedPage < Math.ceil(displayResults.updatedRows.length / updatedRowsPerPage)}
+                                        onNext={() => setUpdatedPage(updatedPage + 1)}
+                                        type="table"
+                                        label={`${((updatedPage - 1) * updatedRowsPerPage) + 1}-${Math.min(updatedPage * updatedRowsPerPage, displayResults.updatedRows.length)} of ${displayResults.updatedRows.length}`}
+                                    />
+                                )}
+                            </s-section>
+                        </s-box>
+                    )}
 
                     {displayResults.failedRows?.length > 0 && (
                         <s-box paddingBlockStart="large">
