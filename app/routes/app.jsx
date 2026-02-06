@@ -91,9 +91,11 @@ export default function App() {
   const location = useLocation();
   const navigation = useNavigation();
 
-  // Only show loading bar when navigating to a different route, not on form submissions or form edits
-  const isFormNavigation = navigation.location?.pathname?.startsWith("/app/forms/") || navigation.location?.pathname === "/app/forms";
-  const isLoading = navigation.state === "loading" && navigation.location?.pathname !== location.pathname && !isFormNavigation;
+  // Only show loading bar when navigating to a different route
+  // Hide it when navigating WITHIN forms (from forms list to form editor or vice versa)
+  const isNavigatingWithinForms = 
+    (location.pathname.startsWith("/app/forms") && navigation.location?.pathname?.startsWith("/app/forms"));
+  const isLoading = navigation.state === "loading" && navigation.location?.pathname !== location.pathname && !isNavigatingWithinForms;
 
   useEffect(() => {
     if (!hasActiveSubscription && location.pathname !== "/app/subscription") {
