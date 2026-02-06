@@ -696,7 +696,6 @@ export default function ImportProductPrices() {
                                 <s-text as="p">Successfully updated Price: {displayResults.updatedPrice || 0}</s-text>
                                 <s-text as="p">Successfully updated CompareAt Price: {displayResults.updatedCompareAt || 0}</s-text>
                                 <s-text as="p">Successfully updated B2B Price: {displayResults.updatedB2B || 0}</s-text>
-                                <s-text as="p">Skipped: {displayResults.skippedRows?.length || 0}</s-text>
                                 <s-text as="p">Errors: {displayResults.errors.length}</s-text>
                                 {displayResults.limitReachedCount > 0 && (
                                     <s-text as="p" tone="critical">Plan limit reached: {displayResults.limitReachedCount} row(s) failed due to subscription limit</s-text>
@@ -707,7 +706,7 @@ export default function ImportProductPrices() {
 
                     {displayResults.updatedRows?.length > 0 && (
                         <s-box paddingBlockStart="large">
-                            <s-section heading={`✅ Updated Rows (${displayResults.updatedRows.length})`}>
+                            <s-section heading="✅ Updated Rows">
                                 <s-table>
                                     <s-table-header-row>
                                         {Object.keys(displayResults.updatedRows[0] || {}).map((key) => (
@@ -744,7 +743,7 @@ export default function ImportProductPrices() {
 
                     {displayResults.failedRows?.length > 0 && (
                         <s-box paddingBlockStart="large">
-                            <s-section heading={`❌ Failed Rows (${displayResults.failedRows.length})`}>
+                            <s-section heading="❌ Failed Rows">
                                 <s-table>
                                     <s-table-header-row>
                                         {Object.keys(displayResults.failedRows[0] || {}).map((key) => (
@@ -781,7 +780,7 @@ export default function ImportProductPrices() {
 
                     {displayResults.skippedRows?.length > 0 && (
                         <s-box paddingBlockStart="large" paddingBlockEnd="large">
-                            <s-section heading={`⏭️ Skipped Rows (${displayResults.skippedRows.length}) - Prices Already Match`}>
+                            <s-section heading="⏭️ Skipped Rows - Prices Already Match">
                                 <s-table>
                                     <s-table-header-row>
                                         {Object.keys(displayResults.skippedRows[0] || {}).map((key) => (
