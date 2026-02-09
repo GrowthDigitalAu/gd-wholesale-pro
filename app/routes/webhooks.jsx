@@ -1,5 +1,4 @@
 import { authenticate } from "../shopify.server";
-import { verifyWebhook } from "../verifyWebhooks";
 
 export const loader = async ({ request }) => {
     return new Response("Webhook endpoint is active", { status: 200 });
@@ -11,17 +10,7 @@ export const action = async ({ request }) => {
     }
 
     try {
-        // STEP 1: Manual HMAC verification (Required for App Store Review)
-        // If the request isn't from Shopify (invalid HMAC), we MUST return 401 Unauthorized.
-        const trustworthy = await verifyWebhook(request.clone());
-        console.log("TRUSTWORTHY WEBHOOK: %o", trustworthy);
-
-        if (!trustworthy) {
-            console.error("❌ Invalid HMAC - Request not from Shopify");
-            return new Response("Unauthorized", { status: 401 });
-        }
-
-        // Authenticate the webhook request
+        // Shopify's authenticate.webhook() already handles HMAC verification
         const { shop, payload, topic } = await authenticate.webhook(request);
 
         console.log(`Received ${topic} webhook from ${shop}`);
