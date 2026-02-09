@@ -17,7 +17,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background-color: #008060;
+  background-color: #91CDFF;
   z-index: 10000;
   animation: loadingBar 1s ease-in-out infinite;
 }
