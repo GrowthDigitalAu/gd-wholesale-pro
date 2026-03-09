@@ -82,8 +82,8 @@ if (!customElements.get('b2b-card-price')) {
       const minRegular = Math.min(...regularPrices);
       const maxRegular = Math.max(...regularPrices);
       
-      // Only use B2B prices if the current customer is a B2B customer
-      const b2bPrices = isB2B
+      const isB2BCustomer = isB2B === true;
+      const b2bPrices = isB2BCustomer
             ? variants
                 .filter(v => v.b2b_price !== null && v.b2b_price > 0)
                 .map(v => v.b2b_price)
