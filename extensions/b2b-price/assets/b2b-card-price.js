@@ -67,7 +67,7 @@ if (!customElements.get('b2b-card-price')) {
       const config = this.getConfiguration();
       if (!config) return;
 
-      const { variantsData, moneyFormat } = config;
+      const { variantsData, moneyFormat, isB2B } = config;
       const variants = Object.values(variantsData);
       
       if (variants.length === 0) return;
@@ -82,9 +82,12 @@ if (!customElements.get('b2b-card-price')) {
       const minRegular = Math.min(...regularPrices);
       const maxRegular = Math.max(...regularPrices);
       
-      const b2bPrices = variants
-            .filter(v => v.b2b_price !== null && v.b2b_price > 0)
-            .map(v => v.b2b_price);
+      // Only use B2B prices if the current customer is a B2B customer
+      const b2bPrices = isB2B
+            ? variants
+                .filter(v => v.b2b_price !== null && v.b2b_price > 0)
+                .map(v => v.b2b_price)
+            : [];
             
       const minB2b = b2bPrices.length > 0 ? Math.min(...b2bPrices) : Infinity;
       const maxB2b = b2bPrices.length > 0 ? Math.max(...b2bPrices) : Infinity;
