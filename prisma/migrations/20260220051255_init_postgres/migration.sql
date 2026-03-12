@@ -22,17 +22,6 @@ CREATE TABLE "Session" (
 );
 
 -- CreateTable
-CREATE TABLE "B2BPriceAdjustment" (
-    "id" SERIAL NOT NULL,
-    "variantId" TEXT NOT NULL,
-    "amount" DOUBLE PRECISION NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "B2BPriceAdjustment_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "Form" (
     "id" SERIAL NOT NULL,
     "title" TEXT NOT NULL,
@@ -55,9 +44,6 @@ CREATE TABLE "FormSubmission" (
 
     CONSTRAINT "FormSubmission_pkey" PRIMARY KEY ("id")
 );
-
--- CreateIndex
-CREATE UNIQUE INDEX "B2BPriceAdjustment_variantId_key" ON "B2BPriceAdjustment"("variantId");
 
 -- AddForeignKey
 ALTER TABLE "FormSubmission" ADD CONSTRAINT "FormSubmission_formId_fkey" FOREIGN KEY ("formId") REFERENCES "Form"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
