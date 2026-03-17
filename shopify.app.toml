@@ -47,3 +47,8 @@ prefix = "apps"
 type = "number_decimal"
 name = "GD B2B Price"
 access.admin = "merchant_read"
+
+[variant.metafields.app.gd_b2b_min_qty]
+type = "number_integer"
+name = "GD B2B Min Qty"
+access.admin = "merchant_read"

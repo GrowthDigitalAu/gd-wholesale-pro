@@ -81,6 +81,9 @@ export const loader = async ({ request }) => {
                                     metafield(namespace: "$app", key: "gd_b2b_price") {
                                         value
                                     }
+                                    minQtyMetafield: metafield(namespace: "$app", key: "gd_b2b_min_qty") {
+                                        value
+                                    }
                                 }
                             }
                         }
@@ -104,11 +107,16 @@ export const loader = async ({ request }) => {
 
 
     const initialAdjustments = {};
+    const initialMinQty = {};
     products.forEach(({ node: product }) => {
         product.variants.edges.forEach(({ node: variant }) => {
             const metaValue = variant.metafield?.value;
             if (metaValue !== undefined && metaValue !== null) {
                 initialAdjustments[variant.id] = parseFloat(metaValue);
+            }
+            const minQtyValue = variant.minQtyMetafield?.value;
+            if (minQtyValue !== undefined && minQtyValue !== null) {
+                initialMinQty[variant.id] = parseInt(minQtyValue, 10);
             }
         });
     });
@@ -158,6 +166,7 @@ export const loader = async ({ request }) => {
         pageInfo, 
         totalCount, 
         initialAdjustments,
+        initialMinQty,
         subscription: {
             planName: planName || "Free",
             variantLimit,
@@ -171,6 +180,7 @@ export const action = async ({ request }) => {
     const formData = await request.formData();
 
     const bulkUpdates = formData.get("bulkUpdates");
+    const bulkMinQty = formData.get("bulkMinQty");
     if (bulkUpdates) {
         const updates = JSON.parse(bulkUpdates);
 
@@ -341,17 +351,49 @@ export const action = async ({ request }) => {
         };
     }
 
+    // Handle min qty updates separately (no plan limit)
+    if (bulkMinQty) {
+        const minQtyUpdates = JSON.parse(bulkMinQty);
+        for (const update of minQtyUpdates) {
+            if (update.value === null || update.value === '' || parseInt(update.value) <= 0) {
+                await admin.graphql(
+                    `#graphql
+                    mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+                        metafieldsDelete(metafields: $metafields) {
+                            deletedMetafields { key }
+                            userErrors { field message }
+                        }
+                    }`,
+                    { variables: { metafields: [{ ownerId: update.variantId, namespace: "$app", key: "gd_b2b_min_qty" }] } }
+                );
+            } else {
+                await admin.graphql(
+                    `#graphql
+                    mutation metaFieldSet($metafields: [MetafieldsSetInput!]!) {
+                        metafieldsSet(metafields: $metafields) {
+                            metafields { id key value }
+                            userErrors { field message }
+                        }
+                    }`,
+                    { variables: { metafields: [{ ownerId: update.variantId, namespace: "$app", key: "gd_b2b_min_qty", value: String(parseInt(update.value)), type: "number_integer" }] } }
+                );
+            }
+        }
+        return { success: true, saved: minQtyUpdates.length, skipped: 0 };
+    }
+
     return { success: true };
 };
 
 export default function B2BPricing() {
-    const { products, pageInfo, totalCount, initialAdjustments, subscription } = useLoaderData();
+    const { products, pageInfo, totalCount, initialAdjustments, initialMinQty, subscription } = useLoaderData();
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const navigate = useNavigate();
     const navigation = useNavigation();
     const [searchParams] = useSearchParams();
     const [priceAdjustments, setPriceAdjustments] = useState(initialAdjustments || {});
+    const [minQtyAdjustments, setMinQtyAdjustments] = useState(initialMinQty || {});
     const [selectedVariants, setSelectedVariants] = useState({});
     const [isStylesLoaded, setIsStylesLoaded] = useState(false);
     const [priceEntryTimestamps, setPriceEntryTimestamps] = useState({});
@@ -415,7 +457,13 @@ export default function B2BPricing() {
                 ...initialAdjustments
             }));
         }
-    }, [initialAdjustments]);
+        if (initialMinQty) {
+            setMinQtyAdjustments(prev => ({
+                ...prev,
+                ...initialMinQty
+            }));
+        }
+    }, [initialAdjustments, initialMinQty]);
 
     const currentPage = parseInt(searchParams.get("page") || "1", 10);
 
@@ -520,29 +568,32 @@ export default function B2BPricing() {
 
 
 
+    const handleMinQtyChange = (variantId, value) => {
+        if (value === '' || /^\d*$/.test(value)) {
+            setMinQtyAdjustments(prev => ({
+                ...prev,
+                [variantId]: value
+            }));
+        }
+    };
+
     const handleBulkSave = () => {
         const updates = [];
+        const minQtyUpdates = [];
 
         filteredProducts.forEach(({ node: product }) => {
             product.variants.edges.forEach(({ node: variant }) => {
                 const currentVal = priceAdjustments[variant.id];
                 const initialVal = initialAdjustments[variant.id];
 
-
-
                 let hasChanged = false;
-
                 const normalizedCurrent = currentVal === "" || currentVal === undefined ? null : parseFloat(currentVal);
                 const normalizedInitial = initialVal === undefined ? null : initialVal;
 
                 if (normalizedCurrent !== normalizedInitial) {
-
                     if (normalizedCurrent !== null && normalizedInitial !== null) {
-                        if (Math.abs(normalizedCurrent - normalizedInitial) > 0.001) {
-                            hasChanged = true;
-                        }
+                        if (Math.abs(normalizedCurrent - normalizedInitial) > 0.001) hasChanged = true;
                     } else {
-
                         hasChanged = true;
                     }
                 }
@@ -554,18 +605,34 @@ export default function B2BPricing() {
                         timestamp: priceEntryTimestamps[variant.id] || 0
                     });
                 }
+
+                // Min qty changes
+                const currentMinQty = minQtyAdjustments[variant.id];
+                const initialMin = initialMinQty?.[variant.id];
+                const normalizedMinCurrent = currentMinQty === '' || currentMinQty === undefined ? null : parseInt(currentMinQty);
+                const normalizedMinInitial = initialMin === undefined ? null : initialMin;
+                if (normalizedMinCurrent !== normalizedMinInitial) {
+                    minQtyUpdates.push({ variantId: variant.id, value: currentMinQty });
+                }
             });
         });
 
         if (updates.length > 0) {
-
             updates.sort((a, b) => a.timestamp - b.timestamp);
-            
             fetcher.submit(
                 { bulkUpdates: JSON.stringify(updates) },
                 { method: "POST" }
             );
-        } else {
+        }
+
+        if (minQtyUpdates.length > 0) {
+            fetcher.submit(
+                { bulkMinQty: JSON.stringify(minQtyUpdates) },
+                { method: "POST" }
+            );
+        }
+
+        if (updates.length === 0 && minQtyUpdates.length === 0) {
             shopify.toast.show("No changes to save on this page");
         }
     };
@@ -643,6 +710,7 @@ export default function B2BPricing() {
                                             <s-table-header>Product</s-table-header>
                                             <s-table-header>SKU</s-table-header>
                                             <s-table-header>Original Price</s-table-header>
+                                            <s-table-header>Min Qty</s-table-header>
                                             <s-table-header>B2B Price</s-table-header>
 
                                         </s-table-header-row>
@@ -711,12 +779,25 @@ export default function B2BPricing() {
                                                             </s-text>
                                                         </s-table-cell>
                                                         <s-table-cell>
+                                                            <div style={{ maxWidth: '100px' }}>
+                                                                <s-text-field
+                                                                    label=""
+                                                                    value={minQtyAdjustments[selectedVariant.id] !== undefined ? String(minQtyAdjustments[selectedVariant.id]) : ''}
+                                                                    onInput={(e) => handleMinQtyChange(selectedVariant.id, e.target.value)}
+                                                                    type="number"
+                                                                    min="1"
+                                                                    step="1"
+                                                                    onKeyDown={handleKeyDown}
+                                                                    autoComplete="off"
+                                                                />
+                                                            </div>
+                                                        </s-table-cell>
+                                                        <s-table-cell>
                                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', maxWidth: '200px' }}>
                                                                 <s-text-field
                                                                     label=""
                                                                     value={priceAdjustments[selectedVariant.id] || ''}
                                                                     onInput={(e) => handlePriceAdjustmentChange(selectedVariant.id, e.target.value)}
-                                                                    placeholder="0.00"
                                                                     prefix="$"
                                                                     type="number"
                                                                     step="0.01"
