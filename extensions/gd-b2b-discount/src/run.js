@@ -29,10 +29,18 @@ export function run(input) {
   for (const line of input.cart.lines) {
     if (line.merchandise) {
       const metaValue = line.merchandise.metafield?.value;
+      const minQtyValue = line.merchandise.minQtyMetafield?.value;
 
       if (metaValue) {
         const targetPrice = parseFloat(metaValue);
         const currentPrice = parseFloat(line.cost.amountPerQuantity.amount);
+        const requiredMinQty = minQtyValue ? parseInt(minQtyValue, 10) : 1;
+
+        // Check Minimum Quantity rule first
+        if (line.quantity < requiredMinQty) {
+          console.log(`No discount: Line quantity (${line.quantity}) is less than required minimum (${requiredMinQty})`);
+          continue; // Skip calculating discount for this line
+        }
 
         // Calculate difference
         if (targetPrice < currentPrice) {

@@ -20,6 +20,9 @@ query RunInput {
           metafield(namespace: "$app", key: "gd_b2b_price") {
             value
           }
+          minQtyMetafield: metafield(namespace: "$app", key: "gd_b2b_min_qty") {
+            value
+          }
         }
       }
     }

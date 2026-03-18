@@ -10,7 +10,6 @@ if (!customElements.get('b2b-prod-price')) {
     }
 
     disconnectedCallback() {
-      console.log("HelloBox disconnectedCallback");
       this.cleanup();
     }
     
@@ -33,10 +32,8 @@ if (!customElements.get('b2b-prod-price')) {
       this.visibilityObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
-            console.log("HelloBox connectedCallback");
             this.handleConnect();
           } else {
-             console.log("HelloBox disconnectedCallback---");
              this.unbindEvents(); 
              this.dataset.initialized = "false"; // Allo re-init if shown again
           }
@@ -52,7 +49,6 @@ if (!customElements.get('b2b-prod-price')) {
       if (this.dataset.initialized === "true") return;
 
       const config = this.getConfiguration();
-      console.log("----->>>", config);
       if (config) {
         this.config = config;
         this.dataset.initialized = "true";
@@ -66,7 +62,6 @@ if (!customElements.get('b2b-prod-price')) {
       try {
         return JSON.parse(scriptTag.textContent.trim());
       } catch (e) {
-        console.error("Error parsing config from script", e);
         return null;
       }
     }
@@ -131,12 +126,20 @@ if (!customElements.get('b2b-prod-price')) {
         let html = '';
 
         if (isB2B && data.b2b_price && data.b2b_price > 0) {
+           const minQtyBadge = (data.b2b_min_qty && data.b2b_min_qty > 0) 
+                ? `<div class="b2b-min-qty-text b2b-min-qty-wrapper"><span class="b2b-min-qty-inner-text">${(this.config.minQtyText || "A minimum quantity of [b2b_min_qty] is required to qualify for this price.").replace('[b2b_min_qty]', data.b2b_min_qty)}</span></div>` 
+                : '';
            html = `
               <div class="b2b-price-wrapper b2b-customer-price">
-                  <span class="b2b-price-current">${this.formatMoney(data.b2b_price, moneyFormat)}</span>
-                  <span class="b2b-price-original" style="text-decoration: line-through;">
-                    ${this.formatMoney(data.price, moneyFormat)}
-                  </span>
+                  <div class="b2b-price-group">
+                    <span class="b2b-price-current">
+                      ${this.formatMoney(data.b2b_price, moneyFormat)}
+                    </span>
+                    <span class="b2b-price-original" style="text-decoration: line-through;">
+                      ${this.formatMoney(data.price, moneyFormat)}
+                    </span>
+                  </div>
+                  ${minQtyBadge}
               </div>
            `;
         } 
@@ -196,7 +199,6 @@ if (!customElements.get('b2b-prod-price')) {
     }
 
     handleVariantChange(e) {
-        console.log("Variant change detected", e.target);
         if (e.target.matches('.js-gd-ext-variant-picker')) {
              const productContainer = e.target.closest('.js-gd-ext-product-info-container');
              if (productContainer) {
