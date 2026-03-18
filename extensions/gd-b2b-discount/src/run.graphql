@@ -15,6 +15,7 @@ query RunInput {
         }
       }
       merchandise {
+        __typename
         ... on ProductVariant {
           id
           metafield(namespace: "$app", key: "gd_b2b_price") {

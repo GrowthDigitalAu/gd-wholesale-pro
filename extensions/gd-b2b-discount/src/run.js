@@ -27,7 +27,7 @@ export function run(input) {
   }
 
   for (const line of input.cart.lines) {
-    if (line.merchandise) {
+    if (line.merchandise && line.merchandise.__typename === "ProductVariant") {
       const metaValue = line.merchandise.metafield?.value;
       const minQtyValue = line.merchandise.minQtyMetafield?.value;
 
@@ -55,7 +55,7 @@ export function run(input) {
                   value: percentage.toString()
                 }
               },
-              message: "B2B Price"
+              message: "B2B Wholesale Price"
             });
           }
         } else {
