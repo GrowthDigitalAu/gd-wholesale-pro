@@ -24,7 +24,7 @@
               {{- current_variant.price | money -}}
             </span>
           </div>
-          {% if b2b_min_qty and b2b_min_qty > 0 %}
+          {% if b2b_min_qty and b2b_min_qty > 1 %}
             <div class="b2b-min-qty-text b2b-min-qty-wrapper">
               <span class="b2b-min-qty-inner-text">
                 {{- block.settings.min_qty_text | replace: '[b2b_min_qty]', b2b_min_qty -}}
