@@ -45,7 +45,7 @@
   </div>
 
   <script>
-    window.GDB2B_MIN_ORDER_CENTS = {{ block.settings.min_order_value | times: 100 }};
+    window.GDB2B_MIN_ORDER_CENTS = {{ block.settings.min_order_value | default: 0 | times: 100 }};
     window.GDB2B_IS_OLD_CUSTOMER = {% if customer.tags contains 'old_b2b_customer' %}true{% else %}false{% endif %};
   </script>
   <script src="{{ 'b2b-cart.js' | asset_url }}" defer></script>
@@ -65,7 +65,6 @@
       "type": "number",
       "id": "min_order_value",
       "label": "Cart Total ($)",
-      "default": 500,
       "info": "Leave empty to disable"
     },
     {
