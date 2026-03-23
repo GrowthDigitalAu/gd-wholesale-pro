@@ -10,11 +10,11 @@ if (!customElements.get('b2b-card-price')) {
 
     getConfiguration() {
       const scriptTag = this.querySelector('script[data-prod-card-price]');
-      if (!scriptTag || !scriptTag.textContent) return null;
+      if (!scriptTag || !scriptTag.textContent.trim()) return null;
       try {
         return JSON.parse(scriptTag.textContent.trim());
       } catch (e) {
-        console.error("Error parsing config from script", e);
+        console.error("Error parsing config from script", e, scriptTag.textContent);
         return null;
       }
     }
@@ -63,9 +63,16 @@ if (!customElements.get('b2b-card-price')) {
       return dollars + cents;
     }
 
-    loadInitialPrice() {
+    loadInitialPrice(attempts = 0) {
+      if (attempts > 50) return;
+
       const config = this.getConfiguration();
-      if (!config) return;
+      const priceContainer = this.querySelector('.js-gd-ext-card-price');
+
+      if (!config || !priceContainer) {
+          setTimeout(() => this.loadInitialPrice(attempts + 1), 50);
+          return;
+      }
 
       const { variantsData, moneyFormat, isB2B, minQtyText } = config;
       const variants = Object.values(variantsData);
@@ -73,9 +80,6 @@ if (!customElements.get('b2b-card-price')) {
       if (variants.length === 0) return;
 
       const isSingleVariant = variants.length === 1;
-      const priceContainer = this.querySelector('.js-gd-ext-card-price');
-      if (!priceContainer) return;
-
       let finalHtml = '';
       
       const regularPrices = variants.map(v => v.price);
