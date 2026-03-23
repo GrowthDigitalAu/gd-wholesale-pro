@@ -18,10 +18,10 @@
         <div class="b2b-price-wrapper b2b-customer-price">
           <div class="b2b-price-group">
             <span class="b2b-price-current">
-              {{ b2b_price | money }}
+              {{ b2b_price | money_with_currency }}
             </span>
             <span class="b2b-price-original" style="text-decoration: line-through;">
-              {{- current_variant.price | money -}}
+              {{- current_variant.price | money_with_currency -}}
             </span>
           </div>
           {% if b2b_min_qty and b2b_min_qty > 1 %}
@@ -34,14 +34,14 @@
         </div>
       {% elsif current_variant.compare_at_price > current_variant.price %}
         <div class="b2b-price-wrapper b2b-regular-sale">
-          <span class="b2b-price-current">{{ current_variant.price | money }}</span>
+          <span class="b2b-price-current">{{ current_variant.price | money_with_currency }}</span>
           <span class="b2b-price-compare" style="text-decoration: line-through;">
-            {{- current_variant.compare_at_price | money -}}
+            {{- current_variant.compare_at_price | money_with_currency -}}
           </span>
         </div>
       {% else %}
         <div class="b2b-price-wrapper b2b-regular-price">
-          <span class="b2b-price-current">{{ current_variant.price | money }}</span>
+          <span class="b2b-price-current">{{ current_variant.price | money_with_currency }}</span>
         </div>
       {% endif %}
     </div>
@@ -49,7 +49,7 @@
     <script type="application/json">
       {
         "isB2B": {{ has_b2b_tag | json }},
-        "moneyFormat": {{ shop.money_format | json }},
+        "moneyFormat": {{ shop.money_with_currency_format | json }},
         "variantsData": {
           {% for variant in selected_product.variants %}
             "{{ variant.id }}": {
