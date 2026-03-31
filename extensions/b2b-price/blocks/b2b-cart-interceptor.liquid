@@ -1,0 +1,82 @@
+{% if shop.metafields.gd_price_updator.subscription_active == 'true' %}
+  <script src="{{ 'b2b-product-price.js' | asset_url }}" defer="defer"></script>
+  {% if block.settings.enable_card_price_script %}
+    <script src="{{ 'b2b-card-price.js' | asset_url }}" defer="defer"></script>
+  {% endif %}
+
+  <style>
+    .js-gd-ext-card-price {
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: 10px;
+      margin-top: 5px;
+    }
+    .b2b-min-qty-text {
+      font-size: 0.8em;
+      font-weight: normal;
+      color: red;
+      display: block;
+      width: 100%;
+    }
+  </style>
+{% endif %}
+
+{% if customer and customer.tags contains 'B2B_approved' %}
+  <div id="gd-b2b-cart-modal" class="gd-b2b-modal-overlay" style="display: none;">
+    <div class="gd-b2b-modal-content">
+      <h3 class="gd-b2b-modal-title">B2B Minimum Order Not Met</h3>
+      <p class="gd-b2b-modal-text">
+        Your wholesale subtotal is under the required
+        <strong>{{ block.settings.min_order_value | money_without_trailing_zeros }}</strong> minimum.
+      </p>
+
+      <div class="gd-b2b-modal-checkbox-wrap">
+        <input type="checkbox" id="gd-b2b-opt-out-checkbox">
+        <label for="gd-b2b-opt-out-checkbox"
+          >I want to checkout now at regular retail prices (wholesale discounts will be removed).</label
+        >
+      </div>
+
+      <div class="gd-b2b-modal-actions">
+        <button id="gd-b2b-modal-cancel" class="gd-b2b-btn-secondary">Keep Shopping</button>
+        <button id="gd-b2b-modal-checkout" class="gd-b2b-btn-primary" disabled>Proceed to Checkout</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.GDB2B_MIN_ORDER_CENTS = {{ block.settings.min_order_value | default: 0 | times: 100 }};
+    window.GDB2B_IS_OLD_CUSTOMER = {% if customer.tags contains 'old_b2b_customer' %}true{% else %}false{% endif %};
+  </script>
+  <script src="{{ 'b2b-cart.js' | asset_url }}" defer></script>
+  {{ 'b2b-cart.css' | asset_url | stylesheet_tag }}
+{% endif %}
+
+{% schema %}
+{
+  "name": "GD: Wholesale Pro",
+  "target": "body",
+  "settings": [
+    {
+      "type": "header",
+      "content": "For Minimum First Order Value"
+    },
+    {
+      "type": "number",
+      "id": "min_order_value",
+      "label": "Cart Total ($)",
+      "info": "Leave empty to disable"
+    },
+    {
+      "type": "header",
+      "content": "For Non Block Structured Themes Only"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_card_price_script",
+      "label": "Enable Product Card Price Script",
+      "default": false
+    }
+  ]
+}
+{% endschema %}

@@ -1,8 +1,16 @@
 query RunInput {
   cart {
+    attribute(key: "gd_b2b_checkout_retail") {
+      value
+    }
     buyerIdentity {
       customer {
         hasAnyTag(tags: ["B2B_approved"])
+      }
+    }
+    cost {
+      subtotalAmount {
+        amount
       }
     }
     lines {

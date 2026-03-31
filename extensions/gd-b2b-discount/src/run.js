@@ -26,6 +26,9 @@ export function run(input) {
     return EMPTY_DISCOUNT;
   }
 
+  const TARGET_MIN_ORDER_VALUE = 500;
+  let prospectiveDiscountAmount = 0;
+
   for (const line of input.cart.lines) {
     if (line.merchandise && line.merchandise.__typename === "ProductVariant") {
       const metaValue = line.merchandise.metafield?.value;
@@ -44,10 +47,13 @@ export function run(input) {
 
         // Calculate difference
         if (targetPrice < currentPrice) {
-          const discountAmount = currentPrice - targetPrice;
-          const percentage = (discountAmount / currentPrice) * 100;
+          const discountAmountPerItem = currentPrice - targetPrice;
+          const totalLineDiscountAmount = discountAmountPerItem * line.quantity;
+          const percentage = (discountAmountPerItem / currentPrice) * 100;
 
           if (percentage > 0) {
+            prospectiveDiscountAmount += totalLineDiscountAmount;
+            
             discounts.push({
               targets: [{ cartLine: { id: line.id } }],
               value: {
@@ -69,6 +75,22 @@ export function run(input) {
 
   if (discounts.length === 0) {
     return EMPTY_DISCOUNT;
+  }
+
+  // Check if the user opted out of B2B discounts via the Cart Interceptor
+  const isOptedOut = input.cart.attribute && input.cart.attribute.value === "true";
+
+  // Calculate the projected cart total with B2B discounts applied
+  const cartSubtotal = parseFloat(input.cart.cost?.subtotalAmount?.amount || "0");
+  const postDiscountCartTotal = cartSubtotal - prospectiveDiscountAmount;
+
+  // If the projected wholesale total is under $500, we check the opt-out status
+  // If the wholesale total is >= $500, we completely ignore the opt-out check and auto-restore discounts
+  if (postDiscountCartTotal < TARGET_MIN_ORDER_VALUE) {
+    if (isOptedOut) {
+      console.log(`B2B Opt-Out Active: Cart wholesale total is under threshold ($${postDiscountCartTotal.toFixed(2)})`);
+      return EMPTY_DISCOUNT;
+    }
   }
 
   return {
