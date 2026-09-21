@@ -77,14 +77,42 @@ export const loader = async ({ request }) => {
 
 export default function Index() {
   return (
-    <s-page heading="Welcome to Price Updater">
-      <s-box paddingBlockStart="large" paddingBlockEnd="large">
-        <s-section heading="Use the sidebar to access Price Update features.">
-          <s-paragraph>
-            This app allows you to bulk edit your product prices in your Shopify store.
-          </s-paragraph>
-        </s-section>
-      </s-box>
+    <s-page heading="GD: Wholesale Pro" inlineSize="large">
+      <div className="page-frame">
+        <div className="dashboard-hero">
+          <div>
+            <h2>Run wholesale pricing and buyer approvals from one place.</h2>
+            <p className="panel-copy">Approve trade buyers, set fixed wholesale prices and minimum quantities, then manage larger catalog updates through Excel.</p>
+          </div>
+        </div>
+
+        <div className="action-grid three-columns">
+          <s-section heading="Wholesale applications">
+            <div className="action-panel">
+              <p className="panel-copy">Review incoming buyer applications, approve accounts, and apply the wholesale customer tag.</p>
+              <s-link href="/app/forms">Open applications</s-link>
+            </div>
+          </s-section>
+          <s-section heading="Wholesale groups">
+            <div className="action-panel">
+              <p className="panel-copy">Create buyer tiers such as Gold, Distributor, or VIP using Shopify customer tags.</p>
+              <s-link href="/app/groups">Open groups</s-link>
+            </div>
+          </s-section>
+          <s-section heading="Wholesale pricing">
+            <div className="action-panel">
+              <p className="panel-copy">Set B2B prices and minimum order quantities directly on Shopify variants.</p>
+              <s-link href="/app/b2b-pricing">Open pricing</s-link>
+            </div>
+          </s-section>
+          <s-section heading="Bulk price files">
+            <div className="action-panel">
+              <p className="panel-copy">Import or export retail, compare-at, minimum quantity, and B2B price data using Excel.</p>
+              <s-link href="/app/import-product-prices">Open import</s-link>
+            </div>
+          </s-section>
+        </div>
+      </div>
     </s-page>
   );
 }

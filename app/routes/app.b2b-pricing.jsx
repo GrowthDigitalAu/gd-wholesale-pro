@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { useLoaderData, useFetcher, useNavigate, useSearchParams, useNavigation } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Pagination, Banner, InlineStack, Text, BlockStack } from "@shopify/polaris";
+import { Pagination, Banner, InlineStack, Text } from "@shopify/polaris";
 import { getVariantLimitForPlan } from "../utils/subscription";
+import { getVariantsWithB2BPrices } from "../utils/b2b-pricing.server";
 
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
@@ -124,42 +125,7 @@ export const loader = async ({ request }) => {
     });
 
 
-    const countResponse = await admin.graphql(
-        `#graphql
-        query {
-            products(first: 250) {
-                edges {
-                    node {
-                        variants(first: 100) {
-                            edges {
-                                node {
-                                    id
-                                    metafield(namespace: "$app", key: "gd_b2b_price") {
-                                        value
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                pageInfo {
-                    hasNextPage
-                }
-            }
-        }`
-    );
-
-    const countJson = await countResponse.json();
-    let currentB2BCount = 0;
-    
-    countJson.data?.products?.edges.forEach(({ node: product }) => {
-        product.variants.edges.forEach(({ node: variant }) => {
-            const b2bValue = variant.metafield?.value;
-            if (b2bValue !== undefined && b2bValue !== null && parseFloat(b2bValue) > 0) {
-                currentB2BCount++;
-            }
-        });
-    });
+    const currentVariantsWithB2B = await getVariantsWithB2BPrices(admin);
 
 
 
@@ -172,7 +138,7 @@ export const loader = async ({ request }) => {
         subscription: {
             planName: planName || "Free",
             variantLimit,
-            currentUsage: currentB2BCount
+            currentUsage: currentVariantsWithB2B.size
         }
     };
 };
@@ -209,39 +175,7 @@ export const action = async ({ request }) => {
         const variantLimit = getVariantLimitForPlan(planName, session.shop);
 
 
-        const countResponse = await admin.graphql(
-            `#graphql
-            query {
-                products(first: 250) {
-                    edges {
-                        node {
-                            variants(first: 100) {
-                                edges {
-                                    node {
-                                        id
-                                        metafield(namespace: "$app", key: "gd_b2b_price") {
-                                            value
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }`
-        );
-
-        const countJson = await countResponse.json();
-        const currentVariantsWithB2B = new Set();
-        
-        countJson.data?.products?.edges.forEach(({ node: product }) => {
-            product.variants.edges.forEach(({ node: variant }) => {
-                const b2bValue = variant.metafield?.value;
-                if (b2bValue !== undefined && b2bValue !== null && parseFloat(b2bValue) > 0) {
-                    currentVariantsWithB2B.add(variant.id);
-                }
-            });
-        });
+        const currentVariantsWithB2B = await getVariantsWithB2BPrices(admin);
 
 
         const deletions = [];
@@ -399,7 +333,6 @@ export default function B2BPricing() {
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const navigate = useNavigate();
-    const navigation = useNavigation();
     const [searchParams] = useSearchParams();
     const [priceAdjustments, setPriceAdjustments] = useState(initialAdjustments || {});
     const [minQtyAdjustments, setMinQtyAdjustments] = useState(initialMinQty || {});
@@ -663,9 +596,32 @@ export default function B2BPricing() {
     };
 
     return (
-        <s-page heading="B2B Pricing">
-            {isStylesLoaded && subscription.variantLimit !== null && subscription.currentUsage >= subscription.variantLimit - 3 && (
-                <s-box paddingBlockStart="large">
+        <s-page heading="Wholesale Pricing" inlineSize="large">
+            <div className="page-frame">
+                <div className="dashboard-hero">
+                    <div>
+                        <h2>Set fixed wholesale prices and minimum quantities by variant.</h2>
+                        <p className="panel-copy">Approved B2B buyers see these prices on the storefront and receive the matching checkout discount.</p>
+                    </div>
+                </div>
+
+                <div className="metric-grid">
+                    <div className="metric-tile">
+                        <span>Plan</span>
+                        <strong>{subscription.planName}</strong>
+                    </div>
+                    <div className="metric-tile">
+                        <span>B2B variants</span>
+                        <strong>{subscription.currentUsage}{subscription.variantLimit !== null ? `/${subscription.variantLimit}` : ""}</strong>
+                    </div>
+                    <div className="metric-tile">
+                        <span>Products shown</span>
+                        <strong>{products.length}</strong>
+                    </div>
+                </div>
+
+                {isStylesLoaded && subscription.variantLimit !== null && subscription.currentUsage >= subscription.variantLimit - 3 && (
+                <s-box paddingBlockEnd="large">
                     <Banner
                         tone={
                             subscription.currentUsage >= subscription.variantLimit 
@@ -684,7 +640,7 @@ export default function B2BPricing() {
                                 </Text>
                                 {subscription.currentUsage >= subscription.variantLimit && (
                                     <Text as="span" variant="bodyMd" tone="critical">
-                                        You've reached your limit
+                                        You&apos;ve reached your limit
                                     </Text>
                                 )}
                             </InlineStack>
@@ -700,11 +656,11 @@ export default function B2BPricing() {
                         </InlineStack>
                     </Banner>
                 </s-box>
-            )}
-            <s-box paddingBlockStart="large" paddingBlockEnd="large">
+                )}
+            <s-box paddingBlockEnd="large">
                 <s-section>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <s-text variant="headingMd" as="h2">All Products</s-text>
+                        <s-text variant="headingMd" as="h2">Product Pricing</s-text>
                         <s-button variant="primary" onClick={handleBulkSave} loading={isSaving}>Save</s-button>
                     </div>
                     <s-stack gap="400" direction="block">
@@ -855,6 +811,7 @@ export default function B2BPricing() {
                     </s-stack>
                 </s-section>
             </s-box>
+            </div>
         </s-page>
     );
 }

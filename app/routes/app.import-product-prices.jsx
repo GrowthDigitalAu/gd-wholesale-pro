@@ -722,9 +722,17 @@ export default function ImportProductPrices() {
     const displayResults = finalResults || validatedResults;
 
     return (
-        <s-page heading="Import Product Prices">
-            <s-box paddingBlockStart="large">
-                <s-section heading="Upload an Excel file with SKU, Price, CompareAt Price, and B2B Price columns.">
+        <s-page heading="Import Prices" inlineSize="large">
+            <div className="page-frame">
+            <div className="workflow-strip">
+                <div className={`workflow-step ${file ? "is-complete" : "is-active"}`}><span>1</span><strong>Choose file</strong></div>
+                <div className={`workflow-step ${validatedResults ? "is-complete" : file ? "is-active" : ""}`}><span>2</span><strong>Validate rows</strong></div>
+                <div className={`workflow-step ${finalResults ? "is-complete" : validatedResults?.bulkOperationId ? "is-active" : ""}`}><span>3</span><strong>Update Shopify</strong></div>
+                <div className={`workflow-step ${finalResults ? "is-active" : ""}`}><span>4</span><strong>Review results</strong></div>
+            </div>
+
+            <s-box>
+                <s-section heading="Upload an Excel file with SKU, Price, CompareAt Price, Min Qty, and B2B Price columns.">
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -739,17 +747,13 @@ export default function ImportProductPrices() {
                         loading={(isLoading || (validatedResults?.bulkOperationId && !finalResults)) ? "true" : undefined}
                         paddingBlock="large"
                     >
-                        Import Product Prices
+                        Import Prices
                     </s-button>
                 </s-section>
             </s-box>
 
             {isProgressVisible && (
-                <div style={{
-                    position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                    zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    gap: '16px', width: '300px'
-                }}>
+                <div className="progress-container">
                     <ProgressBar progress={progress} size="small" />
                     <s-text variant="bodyLg">
                          {validatedResults?.bulkOperationId && !finalResults ? "Processing price updates..." : "Importing product prices..."}
@@ -884,6 +888,7 @@ export default function ImportProductPrices() {
                     )}
                 </>
             )}
+            </div>
         </s-page>
     );
 }

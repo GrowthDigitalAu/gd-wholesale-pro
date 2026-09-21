@@ -598,7 +598,7 @@ export default function FormEditor() {
 
   return (
     <Page>
-      <TitleBar title={form ? "Edit Form" : "Create New Form"}>
+      <TitleBar title={form ? "Edit Wholesale Application" : "Create Wholesale Application"}>
         <button variant="primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving..." : "Save"}
         </button>
@@ -627,8 +627,8 @@ export default function FormEditor() {
           <Layout.Section>
             <Card padding="400">
               <BlockStack gap="200">
-                <Text variant="headingSm" as="h6">Form Integration</Text>
-                <Text variant="bodySm" tone="subdued">Copy this ID and paste it into the "Custom Form" block settings in your Theme Editor.</Text>
+                <Text variant="headingSm" as="h6">Storefront Integration</Text>
+                <Text variant="bodySm" tone="subdued">Copy this ID and paste it into the B2B Custom Form block settings in your Theme Editor.</Text>
                 <InlineStack gap="200" align="start" blockAlign="center">
                   <Box background="bg-surface-secondary" padding="200" borderRadius="200" width="100%">
                     <Text variant="bodyMd" as="span" fontFamily="monospace" fontWeight="bold">
@@ -647,8 +647,8 @@ export default function FormEditor() {
           <BlockStack gap="400">
             <Card>
               <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">Form Settings</Text>
-                <TextField label="Form Title" value={title} onChange={setTitle} autoComplete="off" />
+                <Text variant="headingMd" as="h2">Application Settings</Text>
+                <TextField label="Application Title" value={title} onChange={setTitle} autoComplete="off" />
                 <TextField label="Content" value={settings.subtitle} onChange={(val) => setSettings({ ...settings, subtitle: val })} autoComplete="off" multiline={3} />
                 <Divider />
                 <InlineStack gap="400">
@@ -756,7 +756,7 @@ export default function FormEditor() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between">
-                  <Text variant="headingMd" as="h2">Form Preview</Text>
+                  <Text variant="headingMd" as="h2">Application Preview</Text>
                   <Badge tone="info">Live Preview</Badge>
                 </InlineStack>
 

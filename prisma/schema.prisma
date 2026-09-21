@@ -52,3 +52,19 @@ model FormSubmission {
   status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
   createdAt DateTime @default(now())
 }
+
+model WholesaleGroup {
+  id            Int      @id @default(autoincrement())
+  shop          String
+  name          String
+  customerTag   String
+  description   String?
+  pricingMethod String   @default("MANUAL") // MANUAL, PERCENTAGE_OFF
+  discountValue Float?
+  minimumOrder  Float?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([shop, customerTag])
+}

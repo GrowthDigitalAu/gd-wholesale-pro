@@ -339,41 +339,30 @@ export default function ExportProductData() {
 
 
     return (
-        <s-page heading="Export Product Inventory Data">
-            <s-box paddingBlockStart="large" paddingBlockEnd="large">
-                <s-section heading='Click below to export all product price data.'>
+        <s-page heading="Export Prices" inlineSize="large">
+            <div className="page-frame">
+            <s-box paddingBlockEnd="large">
+                <s-section heading='Export product, retail, and wholesale price data to Excel.'>
                     <s-button
                         variant="primary"
                         onClick={handleExport}
                         loading={isLoading ? "true" : undefined}
                         paddingBlock="large"
                     >
-                        Export Product Prices
+                        Export Prices
                     </s-button>
                 </s-section>
             </s-box>
 
             {isProgressVisible && (
-                <div style={{
-                    position: 'fixed',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    zIndex: 1000,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '16px',
-                    width: '300px'
-                }}>
-                    <div style={{ width: '100%' }}>
-                        <ProgressBar progress={progress} size="small" />
-                    </div>
+                <div className="progress-container">
+                    <ProgressBar progress={progress} size="small" />
                     <s-text variant="bodyLg">
                          {statusMessage || "Processing..."}
                     </s-text>
                 </div>
             )}
+            </div>
         </s-page>
     );
 }

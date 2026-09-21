@@ -12,7 +12,9 @@ import { DiscountApplicationStrategy } from "../generated/api";
 const EMPTY_DISCOUNT = {
   discountApplicationStrategy: DiscountApplicationStrategy.First,
   discounts: [],
-};
+}
+
+const DEFAULT_MINIMUM_WHOLESALE_ORDER_VALUE = 500;
 
 /**
  * @param {RunInput} input
@@ -26,7 +28,6 @@ export function run(input) {
     return EMPTY_DISCOUNT;
   }
 
-  const TARGET_MIN_ORDER_VALUE = 500;
   let prospectiveDiscountAmount = 0;
 
   for (const line of input.cart.lines) {
@@ -86,7 +87,7 @@ export function run(input) {
 
   // If the projected wholesale total is under $500, we check the opt-out status
   // If the wholesale total is >= $500, we completely ignore the opt-out check and auto-restore discounts
-  if (postDiscountCartTotal < TARGET_MIN_ORDER_VALUE) {
+  if (postDiscountCartTotal < DEFAULT_MINIMUM_WHOLESALE_ORDER_VALUE) {
     if (isOptedOut) {
       console.log(`B2B Opt-Out Active: Cart wholesale total is under threshold ($${postDiscountCartTotal.toFixed(2)})`);
       return EMPTY_DISCOUNT;
@@ -97,4 +98,4 @@ export function run(input) {
     discountApplicationStrategy: DiscountApplicationStrategy.All,
     discounts: discounts,
   };
-};
+}

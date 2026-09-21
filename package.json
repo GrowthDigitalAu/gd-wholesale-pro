@@ -1,5 +1,5 @@
 {
-  "name": "gd-price-updator-pro",
+  "name": "gd-wholesale-pro",
   "private": true,
   "scripts": {
     "build": "react-router build",

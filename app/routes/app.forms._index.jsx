@@ -416,21 +416,44 @@ export default function Forms() {
 
   return (
     <>
-      <s-page>
-        <TitleBar title="Custom Form" />
-        <s-box paddingBlockStart="large">
+      <s-page heading="Wholesale Applications" inlineSize="large">
+        <TitleBar title="Wholesale Applications" />
+        <div className="page-frame">
+        <div className="dashboard-hero">
+          <div>
+            <h2>Approve trade buyers and manage application submissions.</h2>
+            <p className="panel-copy">Approved buyers are tagged with B2B_approved so they can access wholesale pricing.</p>
+          </div>
+        </div>
+
+        <div className="metric-grid">
+          <div className="metric-tile">
+            <span>Application forms</span>
+            <strong>{forms.length}</strong>
+          </div>
+          <div className="metric-tile">
+            <span>Total submissions</span>
+            <strong>{totalSubmissionsCount}</strong>
+          </div>
+          <div className="metric-tile">
+            <span>Current view</span>
+            <strong>{pagination.totalCount}</strong>
+          </div>
+        </div>
+
+        <s-box>
           <s-section>
             {forms.length === 0 ? (
               <EmptyState
-                heading="Create your form"
+                heading="Create your wholesale application"
                 action={{ content: "Create Form", url: "/app/forms/new" }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Build custom form to collect information from your customers.</p>
+                <p>Collect business details, contact information, and any approval notes you need before giving buyers wholesale access.</p>
               </EmptyState>
             ) : (
               <s-stack>
-                <s-text variant="headingLg" type="strong">Your Form</s-text>
+                <s-text variant="headingLg" type="strong">Application Form</s-text>
                 {forms.map((item, index) => (
                   <div
                     key={item.id}
@@ -457,7 +480,7 @@ export default function Forms() {
                         </s-paragraph>
                       </s-stack>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <s-button 
+                        <s-button
                           loading={editingFormId === item.id}
                           onClick={() => {
                             setEditingFormId(item.id);
@@ -478,7 +501,7 @@ export default function Forms() {
           {totalSubmissionsCount > 0 && (
             <s-box paddingBlockStart="large">
               <s-section>
-                <s-text type="strong">Form Submissions</s-text>
+                <s-text type="strong">Application Submissions</s-text>
                 <div style={{ 
                   display: 'flex', 
                   gap: '0', 
@@ -654,6 +677,7 @@ export default function Forms() {
             </s-box>
           )}
         </s-box>
+        </div>
       </s-page>
 
       <Modal

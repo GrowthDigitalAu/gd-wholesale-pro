@@ -113,12 +113,13 @@ export default function App() {
       
       <NavMenu>
         <s-link href="/app" rel="home">GD: Wholesale Pro</s-link>
-        <s-link href="/app/forms">Custom Form</s-link>
-        <s-link href="/app/b2b-pricing">B2B Product Price</s-link>
-        <s-link href="/app/import-product-prices">Import Product Prices</s-link>
-        <s-link href="/app/export-product-prices">Export Product Prices</s-link>
+        <s-link href="/app/forms">Wholesale Applications</s-link>
+        <s-link href="/app/groups">Wholesale Groups</s-link>
+        <s-link href="/app/b2b-pricing">Wholesale Pricing</s-link>
+        <s-link href="/app/import-product-prices">Import Prices</s-link>
+        <s-link href="/app/export-product-prices">Export Prices</s-link>
         <s-link href="/app/subscription">Subscription</s-link>
-        <s-link href="/app/how-to-use">How To Use</s-link>
+        <s-link href="/app/how-to-use">Setup Guide</s-link>
       </NavMenu>
       <PolarisAppProvider i18n={translations} linkComponent={LinkAdapter}>
         {showContent ? <Outlet /> : null}
