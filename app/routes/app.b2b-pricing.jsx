@@ -1,10 +1,28 @@
 import { useState, useEffect } from "react";
 import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Pagination, Banner, InlineStack, Text } from "@shopify/polaris";
 import { getVariantLimitForPlan } from "../utils/subscription";
 import { getVariantsWithB2BPrices } from "../utils/b2b-pricing.server";
+
+function parseGroupPrices(value) {
+    if (!value) return {};
+
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+        return Object.entries(parsed).reduce((acc, [tag, price]) => {
+            const numericPrice = Number(price);
+            if (tag && numericPrice > 0) acc[tag] = numericPrice;
+            return acc;
+        }, {});
+    } catch {
+        return {};
+    }
+}
 
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
@@ -33,6 +51,10 @@ export const loader = async ({ request }) => {
     const subscription = activeSubscriptions[0] || null;
     const planName = subscription?.name || null;
     const variantLimit = getVariantLimitForPlan(planName, session.shop);
+    const groups = await db.wholesaleGroup.findMany({
+        where: { shop: session.shop, isActive: true },
+        orderBy: [{ name: "asc" }],
+    });
 
     let queryVariables = {
         first: 10,
@@ -85,6 +107,9 @@ export const loader = async ({ request }) => {
                                     minQtyMetafield: metafield(namespace: "$app", key: "gd_b2b_min_qty") {
                                         value
                                     }
+                                    groupPriceMetafield: metafield(namespace: "$app", key: "gd_b2b_group_prices") {
+                                        value
+                                    }
                                 }
                             }
                         }
@@ -109,6 +134,7 @@ export const loader = async ({ request }) => {
 
     const initialAdjustments = {};
     const initialMinQty = {};
+    const initialGroupPrices = {};
     products.forEach(({ node: product }) => {
         product.variants.edges.forEach(({ node: variant }) => {
             const metaValue = variant.metafield?.value;
@@ -121,6 +147,8 @@ export const loader = async ({ request }) => {
                 const minParsed = parseInt(minQtyValue, 10);
                 if (minParsed > 0) initialMinQty[variant.id] = minParsed;
             }
+            const groupPrices = parseGroupPrices(variant.groupPriceMetafield?.value);
+            if (Object.keys(groupPrices).length > 0) initialGroupPrices[variant.id] = groupPrices;
         });
     });
 
@@ -135,6 +163,8 @@ export const loader = async ({ request }) => {
         totalCount, 
         initialAdjustments,
         initialMinQty,
+        initialGroupPrices,
+        groups,
         subscription: {
             planName: planName || "Free",
             variantLimit,
@@ -149,6 +179,7 @@ export const action = async ({ request }) => {
 
     const bulkUpdates = formData.get("bulkUpdates");
     const bulkMinQty = formData.get("bulkMinQty");
+    const bulkGroupUpdates = formData.get("bulkGroupUpdates");
     
     let totalSaved = 0;
     let totalSkipped = 0;
@@ -289,6 +320,121 @@ export const action = async ({ request }) => {
         finalSkippedVariantIds = skippedVariantIds;
     }
 
+    if (bulkGroupUpdates) {
+        const groupUpdates = JSON.parse(bulkGroupUpdates);
+
+        const billingCheck = await admin.graphql(
+            `#graphql
+            query {
+                currentAppInstallation {
+                    activeSubscriptions {
+                        name
+                    }
+                }
+            }`
+        );
+
+        const billingJson = await billingCheck.json();
+        const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+        const planName = activeSubscriptions[0]?.name || null;
+        const variantLimit = getVariantLimitForPlan(planName, session.shop);
+        const currentVariantsWithB2B = await getVariantsWithB2BPrices(admin);
+        const currentGroupPricesByVariant = new Map();
+        const additions = [];
+        const processedUpdates = [];
+
+        for (const update of groupUpdates) {
+            const response = await admin.graphql(
+                `#graphql
+                query getVariantGroupPrices($id: ID!) {
+                    productVariant(id: $id) {
+                        metafield(namespace: "$app", key: "gd_b2b_group_prices") {
+                            value
+                        }
+                    }
+                }`,
+                { variables: { id: update.variantId } }
+            );
+
+            const json = await response.json();
+            const groupPrices = parseGroupPrices(json.data?.productVariant?.metafield?.value);
+            currentGroupPricesByVariant.set(update.variantId, groupPrices);
+
+            const nextValue = update.price === "" || update.price === null || update.price === undefined ? 0 : Number(update.price);
+            const currentlyHasAnyPrice = currentVariantsWithB2B.has(update.variantId);
+
+            if (!currentlyHasAnyPrice && nextValue > 0) {
+                additions.push(update);
+            } else {
+                processedUpdates.push(update);
+            }
+        }
+
+        const availableSlots = variantLimit !== null
+            ? Math.max(0, variantLimit - currentVariantsWithB2B.size)
+            : Infinity;
+        const additionsToProcess = variantLimit !== null ? additions.slice(0, availableSlots) : additions;
+        const skippedUpdates = variantLimit !== null ? additions.slice(availableSlots) : [];
+        processedUpdates.push(...additionsToProcess);
+
+        for (const update of processedUpdates) {
+            const groupPrices = { ...(currentGroupPricesByVariant.get(update.variantId) || {}) };
+            const nextValue = update.price === "" || update.price === null || update.price === undefined ? 0 : Number(update.price);
+
+            if (Number.isNaN(nextValue) || nextValue <= 0) {
+                delete groupPrices[update.customerTag];
+            } else {
+                groupPrices[update.customerTag] = nextValue;
+            }
+
+            const remainingPrices = Object.entries(groupPrices).reduce((acc, [tag, price]) => {
+                if (Number(price) > 0) acc[tag] = Number(price);
+                return acc;
+            }, {});
+
+            if (Object.keys(remainingPrices).length === 0) {
+                await admin.graphql(
+                    `#graphql
+                    mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+                        metafieldsDelete(metafields: $metafields) {
+                            deletedMetafields { key }
+                            userErrors { field message }
+                        }
+                    }`,
+                    { variables: { metafields: [{ ownerId: update.variantId, namespace: "$app", key: "gd_b2b_group_prices" }] } }
+                );
+            } else {
+                await admin.graphql(
+                    `#graphql
+                    mutation metaFieldSet($metafields: [MetafieldsSetInput!]!) {
+                        metafieldsSet(metafields: $metafields) {
+                            metafields { id key value }
+                            userErrors { field message }
+                        }
+                    }`,
+                    {
+                        variables: {
+                            metafields: [{
+                                ownerId: update.variantId,
+                                namespace: "$app",
+                                key: "gd_b2b_group_prices",
+                                value: JSON.stringify(remainingPrices),
+                                type: "json"
+                            }]
+                        }
+                    }
+                );
+            }
+        }
+
+        totalSaved += processedUpdates.length;
+        totalSkipped += skippedUpdates.length;
+        finalSkippedVariantIds = [
+            ...finalSkippedVariantIds,
+            ...skippedUpdates.map((update) => update.variantId)
+        ];
+    }
+
     // Handle min qty updates separately (no plan limit)
     if (bulkMinQty) {
         const minQtyUpdates = JSON.parse(bulkMinQty);
@@ -329,21 +475,25 @@ export const action = async ({ request }) => {
 };
 
 export default function B2BPricing() {
-    const { products, pageInfo, totalCount, initialAdjustments, initialMinQty, subscription } = useLoaderData();
+    const { products, pageInfo, totalCount, initialAdjustments, initialMinQty, initialGroupPrices, groups, subscription } = useLoaderData();
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [priceAdjustments, setPriceAdjustments] = useState(initialAdjustments || {});
     const [minQtyAdjustments, setMinQtyAdjustments] = useState(initialMinQty || {});
+    const [groupPriceAdjustments, setGroupPriceAdjustments] = useState(initialGroupPrices || {});
     const [selectedVariants, setSelectedVariants] = useState({});
     const [isStylesLoaded, setIsStylesLoaded] = useState(false);
     const [priceEntryTimestamps, setPriceEntryTimestamps] = useState({});
+    const [selectedPriceList, setSelectedPriceList] = useState("default");
 
 
     const [searchTerm, setSearchTerm] = useState(searchParams.get("query") || "");
 
     const isSaving = fetcher.state !== "idle";
+    const selectedGroup = groups.find((group) => group.customerTag === selectedPriceList);
+    const isGroupPriceListSelected = selectedPriceList !== "default";
 
 
     useEffect(() => {
@@ -379,6 +529,24 @@ export default function B2BPricing() {
                 return updated;
             });
 
+            setGroupPriceAdjustments(prev => {
+                const updated = { ...prev };
+                Object.entries(updated).forEach(([variantId, prices]) => {
+                    const cleanedPrices = { ...prices };
+                    Object.entries(cleanedPrices).forEach(([tag, price]) => {
+                        if (price === "0" || price === 0 || parseFloat(price) === 0) {
+                            delete cleanedPrices[tag];
+                        }
+                    });
+                    if (Object.keys(cleanedPrices).length === 0) {
+                        delete updated[variantId];
+                    } else {
+                        updated[variantId] = cleanedPrices;
+                    }
+                });
+                return updated;
+            });
+
             if (skipped > 0) {
                 shopify.toast.show(`${saved} variant(s) saved. ${skipped} variant(s) skipped due to plan limit reached.`, { isError: true });
                 
@@ -397,6 +565,7 @@ export default function B2BPricing() {
                         const updated = { ...prev };
                         skippedVariantIds.forEach(id => {
                             delete updated[id];
+                            delete updated[`${id}:${selectedPriceList}`];
                         });
                         return updated;
                     });
@@ -408,7 +577,7 @@ export default function B2BPricing() {
         if (fetcher.data?.error) {
             shopify.toast.show("Limit reached. Upgrade your plan.", { isError: true });
         }
-    }, [fetcher.data, shopify]);
+    }, [fetcher.data, selectedPriceList, shopify]);
 
 
 
@@ -425,7 +594,13 @@ export default function B2BPricing() {
                 ...initialMinQty
             }));
         }
-    }, [initialAdjustments, initialMinQty]);
+        if (initialGroupPrices) {
+            setGroupPriceAdjustments(prev => ({
+                ...prev,
+                ...initialGroupPrices
+            }));
+        }
+    }, [initialAdjustments, initialMinQty, initialGroupPrices]);
 
     const currentPage = parseInt(searchParams.get("page") || "1", 10);
 
@@ -468,6 +643,25 @@ export default function B2BPricing() {
                 setPriceEntryTimestamps(prev => ({
                     ...prev,
                     [variantId]: Date.now()
+                }));
+            }
+        }
+    };
+
+    const handleGroupPriceAdjustmentChange = (variantId, customerTag, value) => {
+        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+            setGroupPriceAdjustments(prev => ({
+                ...prev,
+                [variantId]: {
+                    ...(prev[variantId] || {}),
+                    [customerTag]: value
+                }
+            }));
+
+            if (value !== '') {
+                setPriceEntryTimestamps(prev => ({
+                    ...prev,
+                    [`${variantId}:${customerTag}`]: Date.now()
                 }));
             }
         }
@@ -542,6 +736,7 @@ export default function B2BPricing() {
     const handleBulkSave = () => {
         const updates = [];
         const minQtyUpdates = [];
+        const groupUpdates = [];
 
         filteredProducts.forEach(({ node: product }) => {
             product.variants.edges.forEach(({ node: variant }) => {
@@ -568,6 +763,31 @@ export default function B2BPricing() {
                     });
                 }
 
+                if (isGroupPriceListSelected) {
+                    const currentGroupVal = groupPriceAdjustments[variant.id]?.[selectedPriceList];
+                    const initialGroupVal = initialGroupPrices?.[variant.id]?.[selectedPriceList];
+                    const normalizedGroupCurrent = currentGroupVal === "" || currentGroupVal === undefined ? null : parseFloat(currentGroupVal);
+                    const normalizedGroupInitial = initialGroupVal === undefined ? null : initialGroupVal;
+                    let groupPriceHasChanged = false;
+
+                    if (normalizedGroupCurrent !== normalizedGroupInitial) {
+                        if (normalizedGroupCurrent !== null && normalizedGroupInitial !== null) {
+                            if (Math.abs(normalizedGroupCurrent - normalizedGroupInitial) > 0.001) groupPriceHasChanged = true;
+                        } else {
+                            groupPriceHasChanged = true;
+                        }
+                    }
+
+                    if (groupPriceHasChanged) {
+                        groupUpdates.push({
+                            variantId: variant.id,
+                            customerTag: selectedPriceList,
+                            price: currentGroupVal,
+                            timestamp: priceEntryTimestamps[`${variant.id}:${selectedPriceList}`] || 0
+                        });
+                    }
+                }
+
                 // Min qty changes
                 const currentMinQty = minQtyAdjustments[variant.id];
                 const initialMin = initialMinQty?.[variant.id];
@@ -583,6 +803,10 @@ export default function B2BPricing() {
         if (updates.length > 0) {
             updates.sort((a, b) => a.timestamp - b.timestamp);
             payload.bulkUpdates = JSON.stringify(updates);
+        }
+        if (groupUpdates.length > 0) {
+            groupUpdates.sort((a, b) => a.timestamp - b.timestamp);
+            payload.bulkGroupUpdates = JSON.stringify(groupUpdates);
         }
         if (minQtyUpdates.length > 0) {
             payload.bulkMinQty = JSON.stringify(minQtyUpdates);
@@ -601,7 +825,7 @@ export default function B2BPricing() {
                 <div className="dashboard-hero">
                     <div>
                         <h2>Set fixed wholesale prices and minimum quantities by variant.</h2>
-                        <p className="panel-copy">Approved B2B buyers see these prices on the storefront and receive the matching checkout discount.</p>
+                        <p className="panel-copy">Approved B2B buyers receive the selected price list at checkout. Group prices override the default B2B price when a matching group tag exists.</p>
                     </div>
                 </div>
 
@@ -657,6 +881,34 @@ export default function B2BPricing() {
                     </Banner>
                 </s-box>
                 )}
+                <s-box paddingBlockEnd="large">
+                    <s-section heading="Price list">
+                        <div className="section-toolbar">
+                            <p className="panel-copy">
+                                Choose Default B2B price for one shared manual price, or choose a wholesale group to set manual prices just for that group.
+                            </p>
+                            <div style={{ minWidth: "260px" }}>
+                                <s-select
+                                    label="Pricing group"
+                                    value={selectedPriceList}
+                                    onChange={(event) => setSelectedPriceList(event.target.value)}
+                                >
+                                    <s-option value="default">Default B2B price</s-option>
+                                    {groups.map((group) => (
+                                        <s-option key={group.id} value={group.customerTag}>
+                                            {group.name} ({group.customerTag})
+                                        </s-option>
+                                    ))}
+                                </s-select>
+                            </div>
+                        </div>
+                        {isGroupPriceListSelected && (
+                            <div className="feedback-banner is-info">
+                                You are editing manual prices for {selectedGroup?.name || selectedPriceList}. Buyers need B2B_approved plus {selectedPriceList} to receive these prices at checkout.
+                            </div>
+                        )}
+                    </s-section>
+                </s-box>
             <s-box paddingBlockEnd="large">
                 <s-section>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -692,7 +944,7 @@ export default function B2BPricing() {
                                             <s-table-header>SKU</s-table-header>
                                             <s-table-header>Original Price</s-table-header>
                                             <s-table-header>Min Qty</s-table-header>
-                                            <s-table-header>B2B Price</s-table-header>
+                                            <s-table-header>{isGroupPriceListSelected ? "Group B2B Price" : "B2B Price"}</s-table-header>
 
                                         </s-table-header-row>
                                         <s-table-body>
@@ -777,8 +1029,18 @@ export default function B2BPricing() {
                                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', maxWidth: '200px' }}>
                                                                 <s-text-field
                                                                     label=""
-                                                                    value={priceAdjustments[selectedVariant.id] || ''}
-                                                                    onInput={(e) => handlePriceAdjustmentChange(selectedVariant.id, e.target.value)}
+                                                                    value={
+                                                                        isGroupPriceListSelected
+                                                                            ? groupPriceAdjustments[selectedVariant.id]?.[selectedPriceList] || ''
+                                                                            : priceAdjustments[selectedVariant.id] || ''
+                                                                    }
+                                                                    onInput={(e) => {
+                                                                        if (isGroupPriceListSelected) {
+                                                                            handleGroupPriceAdjustmentChange(selectedVariant.id, selectedPriceList, e.target.value);
+                                                                        } else {
+                                                                            handlePriceAdjustmentChange(selectedVariant.id, e.target.value);
+                                                                        }
+                                                                    }}
                                                                     prefix="$"
                                                                     type="number"
                                                                     step="0.01"

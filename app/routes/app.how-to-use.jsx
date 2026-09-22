@@ -30,7 +30,7 @@ export default function HowToUse() {
                                 <span>4</span>
                                 <div>
                                     <strong>Set wholesale pricing</strong>
-                                    <p>Add B2B prices and minimum quantities manually, import them with a spreadsheet, or use percentage-off group pricing.</p>
+                                    <p>Select Default B2B price or a wholesale group in Wholesale Pricing, then enter the variant prices for that price list.</p>
                                 </div>
                             </div>
                             <div className="help-step">
@@ -60,7 +60,7 @@ export default function HowToUse() {
                             </div>
                             <div>
                                 <h3>Manual variant prices</h3>
-                                <p className="panel-copy">Use this when each product or SKU has its own wholesale price. Set prices in Wholesale Pricing or Import Prices.</p>
+                                <p className="panel-copy">Use this when each product or SKU has its own wholesale price. In Wholesale Pricing, select a group such as Gold or Distributor, then enter that group&apos;s price for each variant.</p>
                             </div>
                             <div>
                                 <h3>Percentage off retail</h3>
@@ -72,21 +72,21 @@ export default function HowToUse() {
                                 <span>1</span>
                                 <div>
                                     <strong>Create the group</strong>
-                                    <p>Go to Wholesale Groups, enter a group name, choose one supported tag, and set the pricing method.</p>
+                                    <p>Go to Wholesale Groups, enter a group name, choose one supported tag, and set the pricing method to Manual variant prices.</p>
                                 </div>
                             </div>
                             <div className="help-step">
                                 <span>2</span>
                                 <div>
-                                    <strong>Approve buyers into the group</strong>
-                                    <p>On Wholesale Applications, select the group before approving. The customer receives B2B_approved plus the group tag.</p>
+                                    <strong>Enter group variant prices</strong>
+                                    <p>Go to Wholesale Pricing, choose the group in the Price list selector, enter each variant&apos;s price, and save.</p>
                                 </div>
                             </div>
                             <div className="help-step">
                                 <span>3</span>
                                 <div>
-                                    <strong>Sync and test</strong>
-                                    <p>Active group rules sync automatically. Use Sync Rules if needed, then test checkout with a tagged customer account.</p>
+                                    <strong>Approve buyers and test</strong>
+                                    <p>On Wholesale Applications, select the group before approving. The customer receives B2B_approved plus the group tag, then checkout uses that group&apos;s variant price.</p>
                                 </div>
                             </div>
                         </div>

@@ -63,6 +63,18 @@ if (!customElements.get('b2b-card-price')) {
       return dollars + cents;
     }
 
+    getEffectiveB2BPrice(variant, customerTags) {
+      if (!variant) return null;
+
+      const groupPrices = variant.b2b_group_prices || {};
+      for (const tag of customerTags) {
+        const groupPrice = Number(groupPrices[tag]);
+        if (groupPrice > 0) return Math.round(groupPrice * 100);
+      }
+
+      return variant.b2b_price !== null && variant.b2b_price > 0 ? variant.b2b_price : null;
+    }
+
     loadInitialPrice(attempts = 0) {
       if (attempts > 50) return;
 
@@ -75,6 +87,7 @@ if (!customElements.get('b2b-card-price')) {
       }
 
       const { variantsData, moneyFormat, isB2B, minQtyText, minQtyEnabled } = config;
+      const customerTags = Array.isArray(config.customerTags) ? config.customerTags : [];
       const variants = Object.values(variantsData);
       
       if (variants.length === 0) return;
@@ -89,8 +102,8 @@ if (!customElements.get('b2b-card-price')) {
       const isB2BCustomer = isB2B === true;
       const b2bPrices = isB2BCustomer
             ? variants
-                .filter(v => v.b2b_price !== null && v.b2b_price > 0)
-                .map(v => v.b2b_price)
+                .map(v => this.getEffectiveB2BPrice(v, customerTags))
+                .filter(price => price !== null && price > 0)
             : [];
             
       const minB2b = b2bPrices.length > 0 ? Math.min(...b2bPrices) : Infinity;
@@ -109,7 +122,7 @@ if (!customElements.get('b2b-card-price')) {
                displayCompareAt = Math.min(...validRegulars);
            }
 
-           const winningVariant = variants.find(v => v.b2b_price === displayPrice);
+           const winningVariant = variants.find(v => this.getEffectiveB2BPrice(v, customerTags) === displayPrice);
            if (minQtyEnabled !== false && winningVariant && winningVariant.b2b_min_qty > 1 && minQtyText) {
                const text = minQtyText.replace('[b2b_min_qty]', winningVariant.b2b_min_qty);
                minQtyHtml = `<div class="b2b-min-qty-text b2b-min-qty-wrapper"><span class="b2b-min-qty-inner-text">${text}</span></div>`;

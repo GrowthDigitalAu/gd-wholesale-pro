@@ -18,6 +18,9 @@ export async function getVariantsWithB2BPrices(admin) {
               metafield(namespace: "$app", key: "gd_b2b_price") {
                 value
               }
+              groupPriceMetafield: metafield(namespace: "$app", key: "gd_b2b_group_prices") {
+                value
+              }
             }
           }
         }
@@ -32,6 +35,18 @@ export async function getVariantsWithB2BPrices(admin) {
       const value = node.metafield?.value;
       if (value !== undefined && value !== null && parseFloat(value) > 0) {
         variantIds.add(node.id);
+      }
+
+      const groupPriceValue = node.groupPriceMetafield?.value;
+      if (groupPriceValue) {
+        try {
+          const groupPrices = JSON.parse(groupPriceValue);
+          if (Object.values(groupPrices).some((price) => Number(price) > 0)) {
+            variantIds.add(node.id);
+          }
+        } catch {
+          // Ignore malformed legacy data for usage counts.
+        }
       }
     });
 

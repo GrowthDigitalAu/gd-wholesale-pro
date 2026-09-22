@@ -53,6 +53,8 @@ if (!customElements.get('b2b-prod-price')) {
         this.config = config;
         this.dataset.initialized = "true";
         this.bindEvents();
+        const initialVariantId = document.querySelector('input[name="id"]')?.value || this.config.selectedVariantId;
+        this.updatePriceDisplay(initialVariantId, false);
       }
     }
 
@@ -116,6 +118,20 @@ if (!customElements.get('b2b-prod-price')) {
       }
     }
 
+    getEffectiveB2BPrice(data) {
+      if (!data) return null;
+
+      const customerTags = Array.isArray(this.config?.customerTags) ? this.config.customerTags : [];
+      const groupPrices = data.b2b_group_prices || {};
+
+      for (const tag of customerTags) {
+        const groupPrice = Number(groupPrices[tag]);
+        if (groupPrice > 0) return Math.round(groupPrice * 100);
+      }
+
+      return data.b2b_price && data.b2b_price > 0 ? data.b2b_price : null;
+    }
+
     updatePriceDisplay(variantId, stickyAddCartPresent) {
         if (!this.config) return;
         const { isB2B, moneyFormat, variantsData } = this.config;
@@ -124,8 +140,9 @@ if (!customElements.get('b2b-prod-price')) {
         if (!data) return;
 
         let html = '';
+        const b2bPrice = this.getEffectiveB2BPrice(data);
 
-        if (isB2B && data.b2b_price && data.b2b_price > 0) {
+        if (isB2B && b2bPrice && b2bPrice > 0) {
            const minQtyText = this.config.minQtyText;
            const minQtyEnabled = this.config.minQtyEnabled !== false; // Default to true if missing
            const minQtyBadge = (minQtyEnabled && data.b2b_min_qty && data.b2b_min_qty > 1 && minQtyText) 
@@ -135,7 +152,7 @@ if (!customElements.get('b2b-prod-price')) {
               <div class="b2b-price-wrapper b2b-customer-price">
                   <div class="b2b-price-group">
                     <span class="b2b-price-current">
-                      ${this.formatMoney(data.b2b_price, moneyFormat)}
+                      ${this.formatMoney(b2bPrice, moneyFormat)}
                     </span>
                     <span class="b2b-price-original" style="text-decoration: line-through;">
                       ${this.formatMoney(data.price, moneyFormat)}
@@ -262,7 +279,8 @@ if (!customElements.get('b2b-prod-price')) {
         if (!variantId) return;
 
         const data = this.config.variantsData[variantId];
-        if (!data || !data.b2b_price || !data.b2b_min_qty || data.b2b_min_qty <= 1) return;
+        const b2bPrice = this.getEffectiveB2BPrice(data);
+        if (!data || !b2bPrice || !data.b2b_min_qty || data.b2b_min_qty <= 1) return;
 
         // What is the quantity requested? Look globally first because modern themes often put it outside the form body
         const qtyInput = document.querySelector('input[name="quantity"]') || (form ? form.querySelector('input[name="quantity"]') : null);

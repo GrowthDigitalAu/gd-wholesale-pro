@@ -41,6 +41,22 @@ function findMatchedGroupRule(input) {
   return rules.find((rule) => matchedTags.includes(rule.customerTag)) || null;
 }
 
+function getGroupVariantPrice(line, matchedGroupRule) {
+  if (!matchedGroupRule?.customerTag) return null;
+
+  const rawValue = line.merchandise?.groupPriceMetafield?.value;
+  if (!rawValue) return null;
+
+  try {
+    const groupPrices = JSON.parse(rawValue);
+    const targetPrice = Number(groupPrices?.[matchedGroupRule.customerTag]);
+    return targetPrice > 0 ? targetPrice : null;
+  } catch (error) {
+    console.log("Invalid B2B group variant price metafield", error);
+    return null;
+  }
+}
+
 /**
  * @param {RunInput} input
  * @returns {FunctionRunResult}
@@ -87,11 +103,12 @@ export function run(input) {
           },
           message: `${matchedGroupRule.name || "B2B"} Wholesale Price`
         });
-      } else if (metaValue) {
-        const targetPrice = parseFloat(metaValue);
+      } else {
+        const groupVariantPrice = getGroupVariantPrice(line, matchedGroupRule);
+        const targetPrice = groupVariantPrice || (metaValue ? parseFloat(metaValue) : null);
 
         // Calculate difference
-        if (targetPrice < currentPrice) {
+        if (targetPrice && targetPrice < currentPrice) {
           const discountAmountPerItem = currentPrice - targetPrice;
           const totalLineDiscountAmount = discountAmountPerItem * line.quantity;
           const percentage = (discountAmountPerItem / currentPrice) * 100;
@@ -106,14 +123,16 @@ export function run(input) {
                   value: percentage.toString()
                 }
               },
-              message: "B2B Wholesale Price"
+              message: groupVariantPrice && matchedGroupRule?.name
+                ? `${matchedGroupRule.name} Wholesale Price`
+                : "B2B Wholesale Price"
             });
           }
-        } else {
+        } else if (targetPrice) {
           console.log(`No discount: Target >= Current`);
+        } else if (percentageOff <= 0) {
+          console.log("No Metafield Value found for variant");
         }
-      } else if (percentageOff <= 0) {
-        console.log("No Metafield Value found for variant");
       }
     }
   }
