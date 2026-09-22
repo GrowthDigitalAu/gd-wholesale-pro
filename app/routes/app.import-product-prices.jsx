@@ -6,6 +6,51 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { Pagination, ProgressBar } from "@shopify/polaris";
 import { getVariantLimitForPlan } from "../utils/subscription";
 
+const IMPORT_FIELDS = [
+    {
+        key: "SKU",
+        label: "SKU",
+        required: true,
+        aliases: ["sku", "variant sku", "variant_sku", "product sku", "barcode"],
+        help: "Required. Used to match each row to a Shopify variant."
+    },
+    {
+        key: "Price",
+        label: "Retail price",
+        required: false,
+        aliases: ["price", "retail price", "shopify price", "current price", "variant price"],
+        help: "Optional. Updates Shopify variant price."
+    },
+    {
+        key: "CompareAt Price",
+        label: "Compare-at price",
+        required: false,
+        aliases: ["compare at price", "compare-at price", "compare_at_price", "rrp", "was price"],
+        help: "Optional. Use null to clear an existing compare-at price."
+    },
+    {
+        key: "Min Qty",
+        label: "Minimum quantity",
+        required: false,
+        aliases: ["min qty", "minimum qty", "minimum quantity", "moq", "b2b min qty"],
+        help: "Optional. Sets the minimum quantity required for wholesale pricing."
+    },
+    {
+        key: "B2B Price",
+        label: "B2B price",
+        required: false,
+        aliases: ["b2b price", "wholesale price", "trade price", "dealer price", "b2b_price"],
+        help: "Optional. Sets the fixed wholesale price for approved buyers. Use null or 0 to clear it."
+    }
+];
+
+const normalizeHeader = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const guessColumn = (headers, field) => {
+    const candidates = [field.key, ...field.aliases].map(normalizeHeader);
+    return headers.find((header) => candidates.includes(normalizeHeader(header))) || "";
+};
+
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
     const url = new URL(request.url);
@@ -51,7 +96,8 @@ export const loader = async ({ request }) => {
                              bulkErrors.push(userErrors[0].message);
                         }
                     });
-                } catch (e) {
+                } catch (error) {
+                    console.error("Failed to read bulk operation results:", error);
                 }
              }
              
@@ -72,8 +118,18 @@ export const action = async ({ request }) => {
     const formData = await request.formData();
     const dataString = formData.get("data");
     const headersString = formData.get("headers");
-    const rows = JSON.parse(dataString);
+    const mappingString = formData.get("mapping");
+    const rawRows = JSON.parse(dataString);
     const headersFromFrontend = headersString ? JSON.parse(headersString) : null;
+    const columnMapping = mappingString ? JSON.parse(mappingString) : {};
+    const rows = rawRows.map((row) => {
+        const normalizedRow = {};
+        IMPORT_FIELDS.forEach((field) => {
+            const sourceColumn = columnMapping[field.key] || field.key;
+            normalizedRow[field.key] = sourceColumn ? row[sourceColumn] : undefined;
+        });
+        return normalizedRow;
+    });
 
     const results = {
         total: rows.length,
@@ -92,7 +148,8 @@ export const action = async ({ request }) => {
 
     let allColumns = [];
     if (headersFromFrontend && headersFromFrontend.length > 0) {
-        allColumns = headersFromFrontend;
+        allColumns = [...headersFromFrontend, "SKU", "Price", "CompareAt Price", "Min Qty", "B2B Price"]
+            .filter((value, index, array) => value && array.indexOf(value) === index);
     } else {
         const allColumnsSet = new Set();
         rows.forEach(row => {
@@ -198,7 +255,7 @@ export const action = async ({ request }) => {
     const processedCombinations = new Set();
     const bulkUpdates = [];
 
-    const hasB2BPriceColumn = rows.length > 0 && rows[0].hasOwnProperty("B2B Price");
+    const hasB2BPriceColumn = rows.length > 0 && Object.prototype.hasOwnProperty.call(rows[0], "B2B Price");
     
     let sortedRows = rows;
     if (hasB2BPriceColumn) {
@@ -265,13 +322,11 @@ export const action = async ({ request }) => {
             }
 
             let newB2BPrice = null;
-            let shouldClearB2B = false;
-            
+
             if (b2bPriceRaw !== undefined && b2bPriceRaw !== null) {
                 const trimmed = String(b2bPriceRaw).trim();
                 
                 if (trimmed.toLowerCase() === "null") {
-                    shouldClearB2B = true;
                     newB2BPrice = 0;
                 } else if (trimmed !== "") {
                     const parsed = parseFloat(trimmed);
@@ -282,13 +337,11 @@ export const action = async ({ request }) => {
             }
 
             let newMinQty = null;
-            let shouldClearMinQty = false;
-            
+
             if (minQtyRaw !== undefined && minQtyRaw !== null) {
                 const trimmed = String(minQtyRaw).trim();
                 
                 if (trimmed.toLowerCase() === "null") {
-                    shouldClearMinQty = true;
                     newMinQty = 0;
                 } else if (trimmed !== "") {
                     const parsed = parseInt(trimmed, 10);
@@ -572,6 +625,8 @@ export default function ImportProductPrices() {
     
     const [file, setFile] = useState(null);
     const [parsedData, setParsedData] = useState(null);
+    const [headersInOrder, setHeadersInOrder] = useState([]);
+    const [columnMapping, setColumnMapping] = useState({});
     const [progress, setProgress] = useState(0);
     const [isProgressVisible, setIsProgressVisible] = useState(false);
     const fileInputRef = useRef(null);
@@ -597,6 +652,9 @@ export default function ImportProductPrices() {
             setUpdatedPage(1);
             setValidatedResults(null); 
             setFinalResults(null);
+            setParsedData(null);
+            setHeadersInOrder([]);
+            setColumnMapping({});
 
             e.target.value = ""; 
 
@@ -617,21 +675,16 @@ export default function ImportProductPrices() {
                         row.eachCell((cell, colNumber) => {
                             if (headers[colNumber]) rowData[headers[colNumber]] = cell.value;
                         });
-                        if (rowData["SKU"] && String(rowData["SKU"]).trim() !== "") {
+                        if (Object.values(rowData).some(value => value !== undefined && value !== null && String(value).trim() !== "")) {
                             jsonData.push(rowData);
                         }
                     }
                 });
                 setParsedData(jsonData);
-                shopify.toast.show(`File loaded: ${jsonData.length} rows. Starting import...`, { duration: 5000 });
-                setIsProgressVisible(true);
-                setProgress(10);
-                // Send headers to preserve column order
                 const headersInOrder = headers.filter(h => h); // Remove empty entries
-                fetcher.submit({ 
-                    data: JSON.stringify(jsonData),
-                    headers: JSON.stringify(headersInOrder)
-                }, { method: "POST" });
+                setHeadersInOrder(headersInOrder);
+                setColumnMapping(Object.fromEntries(IMPORT_FIELDS.map(field => [field.key, guessColumn(headersInOrder, field)])));
+                shopify.toast.show(`File loaded: ${jsonData.length} rows. Review the column mapping before importing.`, { duration: 5000 });
             };
             reader.readAsArrayBuffer(selectedFile);
         }
@@ -639,6 +692,33 @@ export default function ImportProductPrices() {
 
     const handleButtonClick = () => {
         if (fileInputRef.current) fileInputRef.current.click();
+    };
+
+    const handleMappingChange = (fieldKey, sourceColumn) => {
+        setColumnMapping(prev => ({
+            ...prev,
+            [fieldKey]: sourceColumn
+        }));
+    };
+
+    const handleStartImport = () => {
+        if (!parsedData || parsedData.length === 0) {
+            shopify.toast.show("Upload a file with at least one data row.", { isError: true });
+            return;
+        }
+
+        if (!columnMapping["SKU"]) {
+            shopify.toast.show("Map the SKU column before importing.", { isError: true });
+            return;
+        }
+
+        setIsProgressVisible(true);
+        setProgress(10);
+        fetcher.submit({
+            data: JSON.stringify(parsedData),
+            headers: JSON.stringify(headersInOrder),
+            mapping: JSON.stringify(columnMapping)
+        }, { method: "POST" });
     };
 
     // --- HANDLE ACTION RESPONSE ---
@@ -726,13 +806,27 @@ export default function ImportProductPrices() {
             <div className="page-frame">
             <div className="workflow-strip">
                 <div className={`workflow-step ${file ? "is-complete" : "is-active"}`}><span>1</span><strong>Choose file</strong></div>
-                <div className={`workflow-step ${validatedResults ? "is-complete" : file ? "is-active" : ""}`}><span>2</span><strong>Validate rows</strong></div>
+                <div className={`workflow-step ${validatedResults ? "is-complete" : parsedData ? "is-active" : ""}`}><span>2</span><strong>Map columns</strong></div>
                 <div className={`workflow-step ${finalResults ? "is-complete" : validatedResults?.bulkOperationId ? "is-active" : ""}`}><span>3</span><strong>Update Shopify</strong></div>
                 <div className={`workflow-step ${finalResults ? "is-active" : ""}`}><span>4</span><strong>Review results</strong></div>
             </div>
 
             <s-box>
-                <s-section heading="Upload an Excel file with SKU, Price, CompareAt Price, Min Qty, and B2B Price columns.">
+                <s-section heading="Upload a price file">
+                    <div className="import-guide-grid">
+                        <div>
+                            <h3>Required column</h3>
+                            <p className="panel-copy"><strong>SKU</strong> is required. It is used to match each row to a Shopify variant.</p>
+                        </div>
+                        <div>
+                            <h3>Optional columns</h3>
+                            <p className="panel-copy">Price, Compare-at Price, Min Qty, and B2B Price can be mapped from any column names in your file.</p>
+                        </div>
+                        <div>
+                            <h3>Blank cells</h3>
+                            <p className="panel-copy">Blank optional cells are ignored. Use <strong>null</strong> to clear compare-at, minimum quantity, or B2B price where supported.</p>
+                        </div>
+                    </div>
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -747,10 +841,45 @@ export default function ImportProductPrices() {
                         loading={(isLoading || (validatedResults?.bulkOperationId && !finalResults)) ? "true" : undefined}
                         paddingBlock="large"
                     >
-                        Import Prices
+                        Choose Excel File
                     </s-button>
                 </s-section>
             </s-box>
+
+            {parsedData && !isProgressVisible && !displayResults && (
+                <s-box paddingBlockStart="large">
+                    <s-section heading="Map columns">
+                        <div className="mapping-grid">
+                            {IMPORT_FIELDS.map((field) => (
+                                <label key={field.key}>
+                                    {field.label} {field.required ? "(required)" : "(optional)"}
+                                    <select
+                                        value={columnMapping[field.key] || ""}
+                                        onChange={(event) => handleMappingChange(field.key, event.target.value)}
+                                    >
+                                        <option value="">Do not import</option>
+                                        {headersInOrder.map((header) => (
+                                            <option key={header} value={header}>{header}</option>
+                                        ))}
+                                    </select>
+                                    <span>{field.help}</span>
+                                </label>
+                            ))}
+                        </div>
+                        <div className="file-meta">
+                            <span>{file?.name}</span>
+                            <span>{parsedData.length} rows found</span>
+                            <span>{headersInOrder.length} columns found</span>
+                        </div>
+                        <div className="button-row">
+                            <button className="primary-action-button" type="button" onClick={handleStartImport} disabled={isLoading}>
+                                Start Import
+                            </button>
+                            <s-button onClick={handleButtonClick}>Choose Different File</s-button>
+                        </div>
+                    </s-section>
+                </s-box>
+            )}
 
             {isProgressVisible && (
                 <div className="progress-container">
