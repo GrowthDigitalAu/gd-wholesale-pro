@@ -1,4 +1,9 @@
 query RunInput {
+  shop {
+    groupRules: metafield(namespace: "gd_wholesale_pro", key: "group_rules") {
+      value
+    }
+  }
   cart {
     attribute(key: "gd_b2b_checkout_retail") {
       value
@@ -6,6 +11,30 @@ query RunInput {
     buyerIdentity {
       customer {
         hasAnyTag(tags: ["B2B_approved"])
+        groupTags: hasTags(tags: [
+          "B2B_approved",
+          "B2B_wholesale",
+          "B2B_distributor",
+          "B2B_vip",
+          "B2B_gold",
+          "B2B_silver",
+          "B2B_bronze",
+          "B2B_dealer",
+          "B2B_partner",
+          "B2B_trade",
+          "Wholesale",
+          "Distributor",
+          "VIP",
+          "Gold",
+          "Silver",
+          "Bronze",
+          "Dealer",
+          "Partner",
+          "Trade"
+        ]) {
+          tag
+          hasTag
+        }
       }
     }
     cost {

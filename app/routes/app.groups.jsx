@@ -182,6 +182,9 @@ export default function WholesaleGroups() {
                 </p>
                 <s-button onClick={() => submitIntent({ intent: "sync" })}>Sync Rules</s-button>
               </div>
+              <div className="feedback-banner is-info">
+                Percentage-off checkout rules currently support common tags like B2B_wholesale, B2B_distributor, B2B_vip, B2B_gold, B2B_silver, B2B_dealer, B2B_partner, and B2B_trade. Manual variant B2B prices still work for every approved buyer.
+              </div>
               {groups.length === 0 ? (
                 <div className="empty-panel">
                   <h3>No wholesale groups yet</h3>
@@ -249,7 +252,17 @@ export default function WholesaleGroups() {
               </label>
               <label>
                 Customer tag
-                <input name="customerTag" placeholder="B2B_distributor" required />
+                <input name="customerTag" placeholder="B2B_distributor" list="supported-wholesale-tags" required />
+                <datalist id="supported-wholesale-tags">
+                  <option value="B2B_wholesale" />
+                  <option value="B2B_distributor" />
+                  <option value="B2B_vip" />
+                  <option value="B2B_gold" />
+                  <option value="B2B_silver" />
+                  <option value="B2B_dealer" />
+                  <option value="B2B_partner" />
+                  <option value="B2B_trade" />
+                </datalist>
               </label>
               <label>
                 Description

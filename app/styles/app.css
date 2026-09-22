@@ -261,6 +261,12 @@
   color: #0c5132;
 }
 
+.feedback-banner.is-info {
+  border: 1px solid #b5d5ff;
+  background: #f3f9ff;
+  color: #084b83;
+}
+
 .table-note {
   margin: 4px 0 0;
   color: #616161;

@@ -16,6 +16,31 @@ const EMPTY_DISCOUNT = {
 
 const DEFAULT_MINIMUM_WHOLESALE_ORDER_VALUE = 500;
 
+function parseGroupRules(input) {
+  const rawValue = input.shop?.groupRules?.value;
+  if (!rawValue) return [];
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    return Array.isArray(parsed?.groups) ? parsed.groups : [];
+  } catch (error) {
+    console.log("Invalid B2B group rules metafield", error);
+    return [];
+  }
+}
+
+function findMatchedGroupRule(input) {
+  const customer = input.cart.buyerIdentity?.customer;
+  const matchedTags = (customer?.groupTags || [])
+    .filter((tagResult) => tagResult.hasTag)
+    .map((tagResult) => tagResult.tag);
+
+  if (matchedTags.length === 0) return null;
+
+  const rules = parseGroupRules(input);
+  return rules.find((rule) => matchedTags.includes(rule.customerTag)) || null;
+}
+
 /**
  * @param {RunInput} input
  * @returns {FunctionRunResult}
@@ -28,6 +53,11 @@ export function run(input) {
     return EMPTY_DISCOUNT;
   }
 
+  const matchedGroupRule = findMatchedGroupRule(input);
+  const groupMinimumOrder = Number(matchedGroupRule?.minimumOrder || 0);
+  const percentageOff = matchedGroupRule?.pricingMethod === "PERCENTAGE_OFF"
+    ? Number(matchedGroupRule.discountValue || 0)
+    : 0;
   let prospectiveDiscountAmount = 0;
 
   for (const line of input.cart.lines) {
@@ -35,16 +65,30 @@ export function run(input) {
       const metaValue = line.merchandise.metafield?.value;
       const minQtyValue = line.merchandise.minQtyMetafield?.value;
 
-      if (metaValue) {
-        const targetPrice = parseFloat(metaValue);
-        const currentPrice = parseFloat(line.cost.amountPerQuantity.amount);
-        const requiredMinQty = minQtyValue ? parseInt(minQtyValue, 10) : 1;
+      const currentPrice = parseFloat(line.cost.amountPerQuantity.amount);
+      const requiredMinQty = minQtyValue ? parseInt(minQtyValue, 10) : 1;
 
-        // Check Minimum Quantity rule first
-        if (line.quantity < requiredMinQty) {
-          console.log(`No discount: Line quantity (${line.quantity}) is less than required minimum (${requiredMinQty})`);
-          continue; // Skip calculating discount for this line
-        }
+      // Check Minimum Quantity rule first
+      if (line.quantity < requiredMinQty) {
+        console.log(`No discount: Line quantity (${line.quantity}) is less than required minimum (${requiredMinQty})`);
+        continue; // Skip calculating discount for this line
+      }
+
+      if (percentageOff > 0 && percentageOff < 100) {
+        const totalLineDiscountAmount = currentPrice * (percentageOff / 100) * line.quantity;
+        prospectiveDiscountAmount += totalLineDiscountAmount;
+
+        discounts.push({
+          targets: [{ cartLine: { id: line.id } }],
+          value: {
+            percentage: {
+              value: percentageOff.toString()
+            }
+          },
+          message: `${matchedGroupRule.name || "B2B"} Wholesale Price`
+        });
+      } else if (metaValue) {
+        const targetPrice = parseFloat(metaValue);
 
         // Calculate difference
         if (targetPrice < currentPrice) {
@@ -68,7 +112,7 @@ export function run(input) {
         } else {
           console.log(`No discount: Target >= Current`);
         }
-      } else {
+      } else if (percentageOff <= 0) {
         console.log("No Metafield Value found for variant");
       }
     }
@@ -87,7 +131,9 @@ export function run(input) {
 
   // If the projected wholesale total is under $500, we check the opt-out status
   // If the wholesale total is >= $500, we completely ignore the opt-out check and auto-restore discounts
-  if (postDiscountCartTotal < DEFAULT_MINIMUM_WHOLESALE_ORDER_VALUE) {
+  const minimumOrderValue = groupMinimumOrder > 0 ? groupMinimumOrder : DEFAULT_MINIMUM_WHOLESALE_ORDER_VALUE;
+
+  if (postDiscountCartTotal < minimumOrderValue) {
     if (isOptedOut) {
       console.log(`B2B Opt-Out Active: Cart wholesale total is under threshold ($${postDiscountCartTotal.toFixed(2)})`);
       return EMPTY_DISCOUNT;
