@@ -81,10 +81,29 @@ export default function Index() {
       <div className="page-frame">
         <div className="dashboard-hero">
           <div>
-            <h2>Run wholesale pricing and buyer approvals from one place.</h2>
-            <p className="panel-copy">Approve trade buyers, set fixed wholesale prices and minimum quantities, then manage larger catalog updates through Excel.</p>
+            <h2>Go beyond Shopify&apos;s default B2B catalogs.</h2>
+            <p className="panel-copy">Create buyer groups, approve trade accounts, and set exact variant prices for each wholesale tier from one workflow.</p>
           </div>
         </div>
+
+        <s-section heading="Built for real wholesale price lists">
+          <div className="import-guide-grid value-grid">
+            <div>
+              <h3>Group-specific variant prices</h3>
+              <p className="panel-copy">Set a different fixed price for the same SKU across Wholesale, Distributor, VIP, Gold, Trade, or any approved buyer group.</p>
+            </div>
+            <div>
+              <h3>Approvals tied to pricing</h3>
+              <p className="panel-copy">Approve applications into the right group so buyers receive B2B_approved plus the correct pricing tag automatically.</p>
+            </div>
+            <div>
+              <h3>Storefront and checkout sync</h3>
+              <p className="panel-copy">Show the right buyer price on product pages and apply the matching discount at checkout with minimum order controls.</p>
+            </div>
+          </div>
+        </s-section>
+
+        <s-box paddingBlockStart="large" />
 
         <div className="action-grid three-columns">
           <s-section heading="Wholesale applications">
@@ -95,13 +114,13 @@ export default function Index() {
           </s-section>
           <s-section heading="Wholesale groups">
             <div className="action-panel">
-              <p className="panel-copy">Create buyer tiers such as Gold, Distributor, or VIP using Shopify customer tags.</p>
+              <p className="panel-copy">Create buyer tiers such as Gold, Distributor, or VIP using Shopify customer tags and dedicated price lists.</p>
               <s-link href="/app/groups">Open groups</s-link>
             </div>
           </s-section>
           <s-section heading="Wholesale pricing">
             <div className="action-panel">
-              <p className="panel-copy">Set B2B prices and minimum order quantities directly on Shopify variants.</p>
+              <p className="panel-copy">Set default B2B prices or choose a group and enter exact variant prices for that buyer tier.</p>
               <s-link href="/app/b2b-pricing">Open pricing</s-link>
             </div>
           </s-section>

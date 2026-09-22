@@ -2,6 +2,25 @@ export default function HowToUse() {
     return (
         <s-page heading="Setup Guide" inlineSize="large">
             <div className="page-frame">
+                <s-section heading="Why use GD Wholesale Pro">
+                    <div className="import-guide-grid">
+                        <div>
+                            <h3>More than 3 catalogs</h3>
+                            <p className="panel-copy">Start with practical groups like Wholesale, Distributor, and VIP, then add more tiers as your trade program grows.</p>
+                        </div>
+                        <div>
+                            <h3>Exact SKU pricing by group</h3>
+                            <p className="panel-copy">Set one manual price for Gold buyers and another price for Distributor buyers on the same variant.</p>
+                        </div>
+                        <div>
+                            <h3>Application-to-price workflow</h3>
+                            <p className="panel-copy">Collect buyer details, approve the account, assign the group, and let the app apply the correct storefront and checkout pricing.</p>
+                        </div>
+                    </div>
+                </s-section>
+
+                <s-box paddingBlockStart="large" />
+
                 <div className="help-layout">
                     <s-section heading="Recommended setup path">
                         <div className="help-steps">
