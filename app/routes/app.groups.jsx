@@ -1,22 +1,37 @@
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { syncWholesaleGroupRules } from "../utils/wholesale-groups.server";
 
 const normalizeTag = (value) => String(value || "").trim().replace(/\s+/g, "_");
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
 
   const groups = await db.wholesaleGroup.findMany({
     where: { shop: session.shop },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
 
-  return { groups };
+  const shopResponse = await admin.graphql(
+    `#graphql
+    query {
+      shop {
+        metafield(namespace: "gd_wholesale_pro", key: "group_rules") {
+          updatedAt
+          value
+        }
+      }
+    }`
+  );
+  const shopJson = await shopResponse.json();
+  const rulesMetafield = shopJson.data?.shop?.metafield || null;
+
+  return { groups, rulesMetafield };
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = formData.get("id") ? Number(formData.get("id")) : null;
@@ -25,7 +40,8 @@ export const action = async ({ request }) => {
     await db.wholesaleGroup.deleteMany({
       where: { id, shop: session.shop },
     });
-    return { success: true };
+    await syncWholesaleGroupRules({ admin, shop: session.shop, db });
+    return { success: true, message: "Wholesale group deleted and rules synced." };
   }
 
   if (intent === "toggle" && id) {
@@ -39,7 +55,13 @@ export const action = async ({ request }) => {
       where: { id },
       data: { isActive: !group.isActive },
     });
-    return { success: true };
+    await syncWholesaleGroupRules({ admin, shop: session.shop, db });
+    return { success: true, message: "Wholesale group status updated and rules synced." };
+  }
+
+  if (intent === "sync") {
+    const rules = await syncWholesaleGroupRules({ admin, shop: session.shop, db });
+    return { success: true, message: `${rules.length} active group rule(s) synced.` };
   }
 
   const name = String(formData.get("name") || "").trim();
@@ -90,11 +112,13 @@ export const action = async ({ request }) => {
     throw error;
   }
 
-  return { success: true };
+  await syncWholesaleGroupRules({ admin, shop: session.shop, db });
+
+  return { success: true, message: "Wholesale group saved and rules synced." };
 };
 
 export default function WholesaleGroups() {
-  const { groups } = useLoaderData();
+  const { groups, rulesMetafield } = useLoaderData();
   const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -131,8 +155,8 @@ export default function WholesaleGroups() {
             <strong>{activeGroups}</strong>
           </div>
           <div className="metric-tile">
-            <span>Checkout status</span>
-            <strong>Manual</strong>
+            <span>Rules sync</span>
+            <strong>{rulesMetafield ? "Ready" : "Needed"}</strong>
           </div>
         </div>
 
@@ -144,13 +168,20 @@ export default function WholesaleGroups() {
 
         {actionData?.success && (
           <div className="feedback-banner is-success">
-            Wholesale group saved.
+            {actionData.message || "Wholesale group saved."}
           </div>
         )}
 
         <div className="app-layout-with-aside">
           <div className="primary-workspace">
             <s-section heading="Groups">
+              <div className="section-toolbar">
+                <p className="panel-copy">
+                  Active group rules sync to a shop metafield for the next pricing-rule checkout pass.
+                  {rulesMetafield?.updatedAt ? ` Last synced ${new Date(rulesMetafield.updatedAt).toLocaleString()}.` : " Sync after creating your first group."}
+                </p>
+                <s-button onClick={() => submitIntent({ intent: "sync" })}>Sync Rules</s-button>
+              </div>
               {groups.length === 0 ? (
                 <div className="empty-panel">
                   <h3>No wholesale groups yet</h3>

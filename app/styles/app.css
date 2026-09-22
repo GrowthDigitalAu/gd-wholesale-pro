@@ -68,6 +68,14 @@
   gap: 14px;
 }
 
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .app-layout-with-aside {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
