@@ -174,6 +174,34 @@ export default function WholesaleGroups() {
 
         <div className="app-layout-with-aside">
           <div className="primary-workspace">
+            <s-section heading="How group pricing works">
+              <div className="help-steps compact-help">
+                <div className="help-step">
+                  <span>1</span>
+                  <div>
+                    <strong>Create a group with a supported customer tag</strong>
+                    <p>Use tags like B2B_wholesale, B2B_distributor, B2B_vip, B2B_gold, B2B_silver, B2B_dealer, B2B_partner, or B2B_trade for automatic percentage discounts.</p>
+                  </div>
+                </div>
+                <div className="help-step">
+                  <span>2</span>
+                  <div>
+                    <strong>Choose the pricing method</strong>
+                    <p>Manual variant prices use the B2B Price set on each product variant. Percentage off retail applies this group discount at checkout.</p>
+                  </div>
+                </div>
+                <div className="help-step">
+                  <span>3</span>
+                  <div>
+                    <strong>Approve buyers into the group</strong>
+                    <p>When approving a wholesale application, choose the group. The customer keeps B2B_approved and also receives the selected group tag.</p>
+                  </div>
+                </div>
+              </div>
+            </s-section>
+
+            <s-box paddingBlockStart="large" />
+
             <s-section heading="Groups">
               <div className="section-toolbar">
                 <p className="panel-copy">
@@ -253,6 +281,7 @@ export default function WholesaleGroups() {
               <label>
                 Customer tag
                 <input name="customerTag" placeholder="B2B_distributor" list="supported-wholesale-tags" required />
+                <span>Use a supported tag for percentage-off checkout rules. Custom tags can still be used for manual grouping and future rules.</span>
                 <datalist id="supported-wholesale-tags">
                   <option value="B2B_wholesale" />
                   <option value="B2B_distributor" />
@@ -274,14 +303,17 @@ export default function WholesaleGroups() {
                   <option value="MANUAL">Manual variant prices</option>
                   <option value="PERCENTAGE_OFF">Percentage off retail</option>
                 </select>
+                <span>Manual uses the B2B Price column on variants. Percentage off applies the discount value below to retail prices.</span>
               </label>
               <label>
                 Discount value
                 <input name="discountValue" type="number" min="0" step="0.01" placeholder="15" />
+                <span>Only needed for Percentage off retail. Example: 15 means 15% off.</span>
               </label>
               <label>
                 Minimum order
                 <input name="minimumOrder" type="number" min="0" step="0.01" placeholder="500" />
+                <span>Optional. Overrides the default wholesale minimum order for this group.</span>
               </label>
               <button className="primary-action-button" type="submit" disabled={isSubmitting}>
                 Create group

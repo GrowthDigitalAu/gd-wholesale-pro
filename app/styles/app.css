@@ -115,6 +115,13 @@
   font-weight: 600;
 }
 
+.settings-panel label span {
+  color: #616161;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .settings-panel input,
 .settings-panel select,
 .settings-panel textarea {
@@ -379,6 +386,10 @@
 .help-steps {
   display: grid;
   gap: 12px;
+}
+
+.compact-help {
+  margin-bottom: 0;
 }
 
 .help-step {
