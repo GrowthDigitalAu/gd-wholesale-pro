@@ -58,6 +58,7 @@ export const loader = async ({ request }) => {
     if (activeSubscriptions.length < 1) {
        return { 
           forms: [], 
+          wholesaleGroups: [],
           recentSubmissions: [], 
           pagination: { currentPage: 1, totalPages: 1, totalCount: 0, hasNextPage: false, hasPreviousPage: false }, 
           activeTab: "all", 
@@ -68,6 +69,14 @@ export const loader = async ({ request }) => {
     const forms = await db.form.findMany({
       where: { shop: session.shop },
       orderBy: { createdAt: "desc" },
+    });
+
+    const wholesaleGroups = await db.wholesaleGroup.findMany({
+      where: {
+        shop: session.shop,
+        isActive: true,
+      },
+      orderBy: { name: "asc" },
     });
 
     const url = new URL(request.url);
@@ -140,7 +149,7 @@ export const loader = async ({ request }) => {
       }
     });
 
-    return { forms, recentSubmissions, pagination, activeTab: tab, totalSubmissionsCount };
+    return { forms, wholesaleGroups, recentSubmissions, pagination, activeTab: tab, totalSubmissionsCount };
   } catch (error) {
     throw error;
   }
@@ -152,6 +161,7 @@ export const action = async ({ request }) => {
   const formId = formData.get("id");
   const intent = formData.get("intent");
   const submissionId = formData.get("submissionId");
+  const wholesaleGroupId = formData.get("wholesaleGroupId");
 
   if (intent === "delete" && formId) {
     const pId = parseInt(formId);
@@ -226,13 +236,35 @@ export const action = async ({ request }) => {
       return { status: "error", message: "Failed to check customer existence." };
     }
 
+    const activeWholesaleGroups = await db.wholesaleGroup.findMany({
+      where: {
+        shop: session.shop,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        customerTag: true,
+      },
+    });
+    const selectedWholesaleGroup = wholesaleGroupId
+      ? activeWholesaleGroups.find(group => String(group.id) === String(wholesaleGroupId))
+      : null;
+    const groupTags = activeWholesaleGroups.map(group => group.customerTag);
+    const selectedGroupTag = selectedWholesaleGroup?.customerTag || null;
+
     if (existingCustomer) {
       let tags = existingCustomer.tags || [];
       const tagToRemove = intent === "approve" ? "B2B_rejected" : "B2B_approved";
       const tagToAdd = intent === "approve" ? "B2B_approved" : "B2B_rejected";
 
       tags = tags.filter(tag => tag !== tagToRemove);
+      if (intent === "approve" || intent === "reject") {
+        tags = tags.filter(tag => !groupTags.includes(tag));
+      }
       if (!tags.includes(tagToAdd)) tags.push(tagToAdd);
+      if (intent === "approve" && selectedGroupTag && !tags.includes(selectedGroupTag)) {
+        tags.push(selectedGroupTag);
+      }
 
 
       const customerInput = {
@@ -274,13 +306,17 @@ export const action = async ({ request }) => {
 
     } else {
       const tagToAdd = intent === "approve" ? "B2B_approved" : "B2B_rejected";
+      const tagsToAdd = [tagToAdd];
+      if (intent === "approve" && selectedGroupTag) {
+        tagsToAdd.push(selectedGroupTag);
+      }
       
       const createInput = {
         email: email,
         firstName: firstName,
         lastName: lastName,
         phone: phone,
-        tags: [tagToAdd]
+        tags: tagsToAdd
       };
 
       const createResponse = await admin.graphql(
@@ -329,7 +365,8 @@ export const action = async ({ request }) => {
     });
 
     const pastTense = intent === "approve" ? "approved" : "rejected";
-    return { status: "success", message: `Submission ${pastTense}.` };
+    const groupMessage = intent === "approve" && selectedGroupTag ? ` Customer tagged ${selectedGroupTag}.` : "";
+    return { status: "success", message: `Submission ${pastTense}.${groupMessage}` };
   }
 
   return { status: "ignored" };
@@ -346,7 +383,7 @@ export const headers = (headersArgs) => {
 import { useState, useEffect } from "react";
 
 export default function Forms() {
-  const { forms, recentSubmissions, pagination, activeTab, totalSubmissionsCount } = useLoaderData();
+  const { forms, wholesaleGroups, recentSubmissions, pagination, activeTab, totalSubmissionsCount } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -354,6 +391,7 @@ export default function Forms() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [editingFormId, setEditingFormId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // holds submissionId to delete
+  const [selectedGroups, setSelectedGroups] = useState({});
 
   useEffect(() => {
     if (actionData) {
@@ -422,7 +460,7 @@ export default function Forms() {
         <div className="dashboard-hero">
           <div>
             <h2>Approve trade buyers and manage application submissions.</h2>
-            <p className="panel-copy">Approved buyers are tagged with B2B_approved so they can access wholesale pricing.</p>
+            <p className="panel-copy">Choose a wholesale group when approving buyers. The app keeps B2B_approved for current pricing and adds the selected group tag for future pricing rules.</p>
           </div>
         </div>
 
@@ -438,6 +476,10 @@ export default function Forms() {
           <div className="metric-tile">
             <span>Current view</span>
             <strong>{pagination.totalCount}</strong>
+          </div>
+          <div className="metric-tile">
+            <span>Active groups</span>
+            <strong>{wholesaleGroups.length}</strong>
           </div>
         </div>
 
@@ -621,14 +663,38 @@ export default function Forms() {
                                 <s-table-cell>
                                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                     {sub.status !== 'APPROVED' && (
+                                      <>
+                                        {wholesaleGroups.length > 0 && (
+                                          <select
+                                            className="inline-select"
+                                            value={selectedGroups[sub.id] || ""}
+                                            onChange={(event) => setSelectedGroups(prev => ({
+                                              ...prev,
+                                              [sub.id]: event.target.value
+                                            }))}
+                                            aria-label="Wholesale group"
+                                          >
+                                            <option value="">Default wholesale</option>
+                                            {wholesaleGroups.map(group => (
+                                              <option key={group.id} value={group.id}>
+                                                {group.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
                                         <s-button
                                           size="slim"
                                           variant="primary"
                                           loading={submittingIntent === 'approve'}
-                                          onClick={() => submit({ intent: 'approve', submissionId: sub.id }, { method: 'post', action: '/app/forms' })}
+                                          onClick={() => submit({
+                                            intent: 'approve',
+                                            submissionId: sub.id,
+                                            wholesaleGroupId: selectedGroups[sub.id] || ''
+                                          }, { method: 'post', action: '/app/forms' })}
                                         >
                                           Approve
                                         </s-button>
+                                      </>
                                       )}
                                     {sub.status !== 'REJECTED' && (
                                         <s-button

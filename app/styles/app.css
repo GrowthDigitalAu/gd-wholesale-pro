@@ -123,6 +123,18 @@
   resize: vertical;
 }
 
+.inline-select {
+  min-height: 32px;
+  max-width: 180px;
+  border: 1px solid #8a8a8a;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #ffffff;
+  color: #202223;
+  font: inherit;
+  font-size: 13px;
+}
+
 .import-guide-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
