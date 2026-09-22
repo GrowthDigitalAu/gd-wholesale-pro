@@ -27,10 +27,22 @@ export function getVariantLimitForPlan(planName, shop) {
     return 10;
 }
 
+export function getGroupLimitForPlan(planName) {
+    if (!planName) return 1;
+
+    const lowerPlan = planName.toLowerCase();
+
+    if (lowerPlan.includes('startup')) return 3;
+    if (lowerPlan.includes('growth')) return 10;
+    if (lowerPlan.includes('expand')) return null;
+
+    return 1;
+}
+
 export const SUBSCRIPTION_TIERS = {
-    FREE: { name: 'Free', limit: 10 },
-    STARTUP: { name: 'Startup', limit: 100 },
-    GROWTH: { name: 'Growth', limit: 500 },
-    EXPAND: { name: 'Expand', limit: null }
+    FREE: { name: 'Free', limit: 10, groupLimit: 1 },
+    STARTUP: { name: 'Startup', limit: 100, groupLimit: 3 },
+    GROWTH: { name: 'Growth', limit: 500, groupLimit: 10 },
+    EXPAND: { name: 'Expand', limit: null, groupLimit: null }
 };
 

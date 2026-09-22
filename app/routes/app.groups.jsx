@@ -2,11 +2,28 @@ import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-ro
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { syncWholesaleGroupRules } from "../utils/wholesale-groups.server";
+import { getGroupLimitForPlan } from "../utils/subscription";
 
 const normalizeTag = (value) => String(value || "").trim().replace(/\s+/g, "_");
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
+
+  const billingCheck = await admin.graphql(
+    `#graphql
+    query {
+      currentAppInstallation {
+        activeSubscriptions {
+          name
+          status
+        }
+      }
+    }`
+  );
+  const billingJson = await billingCheck.json();
+  const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+  const planName = activeSubscriptions[0]?.name || null;
+  const groupLimit = getGroupLimitForPlan(planName);
 
   const groups = await db.wholesaleGroup.findMany({
     where: { shop: session.shop },
@@ -27,7 +44,14 @@ export const loader = async ({ request }) => {
   const shopJson = await shopResponse.json();
   const rulesMetafield = shopJson.data?.shop?.metafield || null;
 
-  return { groups, rulesMetafield };
+  return {
+    groups,
+    rulesMetafield,
+    subscription: {
+      planName: planName || "Free",
+      groupLimit,
+    },
+  };
 };
 
 export const action = async ({ request }) => {
@@ -35,6 +59,21 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = formData.get("id") ? Number(formData.get("id")) : null;
+
+  const billingCheck = await admin.graphql(
+    `#graphql
+    query {
+      currentAppInstallation {
+        activeSubscriptions {
+          name
+        }
+      }
+    }`
+  );
+  const billingJson = await billingCheck.json();
+  const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+  const planName = activeSubscriptions[0]?.name || null;
+  const groupLimit = getGroupLimitForPlan(planName);
 
   if (intent === "delete" && id) {
     await db.wholesaleGroup.deleteMany({
@@ -50,6 +89,16 @@ export const action = async ({ request }) => {
     });
 
     if (!group) return { error: "Wholesale group not found." };
+
+    if (!group.isActive && groupLimit !== null) {
+      const activeGroupCount = await db.wholesaleGroup.count({
+        where: { shop: session.shop, isActive: true },
+      });
+
+      if (activeGroupCount >= groupLimit) {
+        return { error: `Your ${planName || "Free"} plan includes ${groupLimit} active wholesale group${groupLimit === 1 ? "" : "s"}. Pause another group or upgrade your plan to activate this one.` };
+      }
+    }
 
     await db.wholesaleGroup.update({
       where: { id },
@@ -98,6 +147,16 @@ export const action = async ({ request }) => {
         data,
       });
     } else {
+      if (groupLimit !== null) {
+        const activeGroupCount = await db.wholesaleGroup.count({
+          where: { shop: session.shop, isActive: true },
+        });
+
+        if (activeGroupCount >= groupLimit) {
+          return { error: `Your ${planName || "Free"} plan includes ${groupLimit} active wholesale group${groupLimit === 1 ? "" : "s"}. Pause another group or upgrade your plan to create more groups.` };
+        }
+      }
+
       await db.wholesaleGroup.create({
         data: {
           ...data,
@@ -118,12 +177,15 @@ export const action = async ({ request }) => {
 };
 
 export default function WholesaleGroups() {
-  const { groups, rulesMetafield } = useLoaderData();
+  const { groups, rulesMetafield, subscription } = useLoaderData();
   const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const activeGroups = groups.filter((group) => group.isActive).length;
+  const groupLimit = subscription.groupLimit;
+  const isGroupLimitReached = groupLimit !== null && activeGroups >= groupLimit;
+  const groupLimitLabel = groupLimit === null ? "Unlimited" : `${activeGroups}/${groupLimit}`;
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -152,7 +214,11 @@ export default function WholesaleGroups() {
           </div>
           <div className="metric-tile">
             <span>Active groups</span>
-            <strong>{activeGroups}</strong>
+            <strong>{groupLimitLabel}</strong>
+          </div>
+          <div className="metric-tile">
+            <span>Plan</span>
+            <strong>{subscription.planName}</strong>
           </div>
           <div className="metric-tile">
             <span>Rules sync</span>
@@ -169,6 +235,12 @@ export default function WholesaleGroups() {
         {actionData?.success && (
           <div className="feedback-banner is-success">
             {actionData.message || "Wholesale group saved."}
+          </div>
+        )}
+
+        {isGroupLimitReached && (
+          <div className="feedback-banner is-info">
+            Your {subscription.planName} plan includes {groupLimit} active wholesale group{groupLimit === 1 ? "" : "s"}. Pause an existing group or upgrade your plan to add more active buyer tiers.
           </div>
         )}
 
@@ -211,7 +283,7 @@ export default function WholesaleGroups() {
                 <s-button onClick={() => submitIntent({ intent: "sync" })}>Sync Rules</s-button>
               </div>
               <div className="feedback-banner is-info">
-                Percentage-off checkout rules currently support common tags like B2B_wholesale, B2B_distributor, B2B_vip, B2B_gold, B2B_silver, B2B_dealer, B2B_partner, and B2B_trade. Manual variant B2B prices still work for every approved buyer.
+                Percentage-off checkout rules currently support common tags like B2B_wholesale, B2B_distributor, B2B_vip, B2B_gold, B2B_silver, B2B_dealer, B2B_partner, and B2B_trade. Your plan controls how many active wholesale groups can be used at once.
               </div>
               {groups.length === 0 ? (
                 <div className="empty-panel">
@@ -315,9 +387,12 @@ export default function WholesaleGroups() {
                 <input name="minimumOrder" type="number" min="0" step="0.01" placeholder="500" />
                 <span>Optional. Overrides the default wholesale minimum order for this group.</span>
               </label>
-              <button className="primary-action-button" type="submit" disabled={isSubmitting}>
-                Create group
+              <button className="primary-action-button" type="submit" disabled={isSubmitting || isGroupLimitReached}>
+                {isGroupLimitReached ? "Group limit reached" : "Create group"}
               </button>
+              {isGroupLimitReached && (
+                <span>Your current plan includes {groupLimit} active group{groupLimit === 1 ? "" : "s"}. Pause a group or upgrade before creating another active group.</span>
+              )}
             </form>
           </s-section>
         </div>

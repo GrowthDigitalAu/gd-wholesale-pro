@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLoaderData, Form, useSubmit, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import {
   Text,
   Button,
@@ -9,6 +9,37 @@ import {
   Modal,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+
+const PLAN_FEATURES = [
+  {
+    name: "Free",
+    price: "$0",
+    groups: "1 active group",
+    variants: "10 active B2B pricing variants",
+    bestFor: "Testing the workflow on a small catalog.",
+  },
+  {
+    name: "Startup",
+    price: "$10 / 30 days",
+    groups: "3 active groups",
+    variants: "100 active B2B pricing variants",
+    bestFor: "Matching Shopify's default 3 catalog baseline with approval and manual pricing tools.",
+  },
+  {
+    name: "Growth",
+    price: "$30 / 30 days",
+    groups: "10 active groups",
+    variants: "500 active B2B pricing variants",
+    bestFor: "Running multiple wholesale, distributor, VIP, regional, or trade tiers.",
+  },
+  {
+    name: "Expand",
+    price: "$50 / 30 days",
+    groups: "Unlimited active groups",
+    variants: "Unlimited active B2B pricing variants",
+    bestFor: "Large catalogs and advanced wholesale programs.",
+  },
+];
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -163,6 +194,25 @@ export default function SubscriptionPage() {
                 No active subscription found.
               </Text>
             )}
+
+            <Divider />
+
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">
+                Plan limits
+              </Text>
+              <div className="import-guide-grid">
+                {PLAN_FEATURES.map((plan) => (
+                  <div key={plan.name}>
+                    <h3>{plan.name}</h3>
+                    <p className="panel-copy"><strong>{plan.price}</strong></p>
+                    <p className="panel-copy">{plan.groups}</p>
+                    <p className="panel-copy">{plan.variants}</p>
+                    <p className="panel-copy">{plan.bestFor}</p>
+                  </div>
+                ))}
+              </div>
+            </BlockStack>
 
             <Divider />
 
