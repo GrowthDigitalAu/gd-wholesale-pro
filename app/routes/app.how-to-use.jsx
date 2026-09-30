@@ -125,7 +125,11 @@ export default function HowToUse() {
                             </div>
                             <div>
                                 <h3>Optional wholesale fields</h3>
-                                <p className="panel-copy"><strong>Min Qty</strong> sets the minimum wholesale quantity. <strong>B2B Price</strong> sets the fixed wholesale price.</p>
+                                <p className="panel-copy"><strong>Min Qty</strong> sets the minimum wholesale quantity. <strong>B2B Price</strong> sets the fallback fixed wholesale price.</p>
+                            </div>
+                            <div>
+                                <h3>Optional group price fields</h3>
+                                <p className="panel-copy">Use one column per group, such as <strong>B2B_gold Price</strong>, <strong>B2B_distributor Price</strong>, or <strong>VIP Price</strong>.</p>
                             </div>
                         </div>
                         <div className="help-steps">
@@ -140,7 +144,7 @@ export default function HowToUse() {
                                 <span>2</span>
                                 <div>
                                     <strong>Map columns</strong>
-                                    <p>Map your file columns to SKU, Price, Compare-at Price, Min Qty, and B2B Price before importing.</p>
+                                    <p>Map your file columns to SKU, Price, Compare-at Price, Min Qty, B2B Price, and any active group price columns before importing.</p>
                                 </div>
                             </div>
                             <div className="help-step">

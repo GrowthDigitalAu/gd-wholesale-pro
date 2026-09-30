@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 import ExcelJS from "exceljs";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Pagination, ProgressBar } from "@shopify/polaris";
@@ -46,13 +47,46 @@ const IMPORT_FIELDS = [
 
 const normalizeHeader = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
+const parseGroupPrices = (value) => {
+    if (!value) return {};
+
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+        return Object.entries(parsed).reduce((acc, [tag, price]) => {
+            const numericPrice = Number(price);
+            if (tag && numericPrice > 0) acc[tag] = numericPrice;
+            return acc;
+        }, {});
+    } catch {
+        return {};
+    }
+};
+
+const buildGroupImportFields = (groups) => groups.map((group) => ({
+    key: `GROUP_PRICE:${group.customerTag}`,
+    label: `${group.name} price`,
+    required: false,
+    customerTag: group.customerTag,
+    aliases: [
+        `${group.customerTag} price`,
+        `${group.customerTag} b2b price`,
+        `${group.customerTag} wholesale price`,
+        `${group.name} price`,
+        `${group.name} b2b price`,
+        `${group.name} wholesale price`
+    ],
+    help: `Optional. Sets the fixed variant price for buyers tagged ${group.customerTag}. Use null or 0 to clear it.`
+}));
+
 const guessColumn = (headers, field) => {
     const candidates = [field.key, ...field.aliases].map(normalizeHeader);
     return headers.find((header) => candidates.includes(normalizeHeader(header))) || "";
 };
 
 export const loader = async ({ request }) => {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const url = new URL(request.url);
     const checkStatus = url.searchParams.get("checkStatus");
     const operationId = url.searchParams.get("operationId");
@@ -110,12 +144,23 @@ export const loader = async ({ request }) => {
         }
     }
 
-    return { success: true };
+    const groups = await db.wholesaleGroup.findMany({
+        where: { shop: session.shop, isActive: true },
+        orderBy: [{ name: "asc" }],
+    });
+
+    return { success: true, groups };
 };
 
 export const action = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
     const formData = await request.formData();
+    const groups = await db.wholesaleGroup.findMany({
+        where: { shop: session.shop, isActive: true },
+        orderBy: [{ name: "asc" }],
+    });
+    const importFields = [...IMPORT_FIELDS, ...buildGroupImportFields(groups)];
+    const groupPriceFields = importFields.filter((field) => field.key.startsWith("GROUP_PRICE:"));
     const dataString = formData.get("data");
     const headersString = formData.get("headers");
     const mappingString = formData.get("mapping");
@@ -124,7 +169,7 @@ export const action = async ({ request }) => {
     const columnMapping = mappingString ? JSON.parse(mappingString) : {};
     const rows = rawRows.map((row) => {
         const normalizedRow = {};
-        IMPORT_FIELDS.forEach((field) => {
+        importFields.forEach((field) => {
             const sourceColumn = columnMapping[field.key] || field.key;
             normalizedRow[field.key] = sourceColumn ? row[sourceColumn] : undefined;
         });
@@ -138,6 +183,7 @@ export const action = async ({ request }) => {
         updatedCompareAt: 0,
         updatedMinQty: 0,
         updatedB2B: 0,
+        updatedGroupB2B: 0,
         errors: [],
         failedRows: [],
         skippedRows: [],
@@ -148,7 +194,7 @@ export const action = async ({ request }) => {
 
     let allColumns = [];
     if (headersFromFrontend && headersFromFrontend.length > 0) {
-        allColumns = [...headersFromFrontend, "SKU", "Price", "CompareAt Price", "Min Qty", "B2B Price"]
+        allColumns = [...headersFromFrontend, "SKU", "Price", "CompareAt Price", "Min Qty", "B2B Price", ...groupPriceFields.map((field) => field.label)]
             .filter((value, index, array) => value && array.indexOf(value) === index);
     } else {
         const allColumnsSet = new Set();
@@ -213,6 +259,10 @@ export const action = async ({ request }) => {
                             id
                             value
                         }
+                        groupPriceMetafield: metafield(namespace: "$app", key: "gd_b2b_group_prices") {
+                            id
+                            value
+                        }
                         product {
                             id
                         }
@@ -234,6 +284,8 @@ export const action = async ({ request }) => {
                     compareAtPrice: node.compareAtPrice ? parseFloat(node.compareAtPrice) : null,
                     b2bPrice: node.metafield?.value !== undefined && node.metafield?.value !== null ? parseFloat(node.metafield.value) : null,
                     b2bMetafieldId: node.metafield?.id || null,
+                    groupPrices: parseGroupPrices(node.groupPriceMetafield?.value),
+                    groupPriceMetafieldId: node.groupPriceMetafield?.id || null,
                     minQty: node.minQtyMetafield?.value !== undefined && node.minQtyMetafield?.value !== null ? parseInt(node.minQtyMetafield.value, 10) : null,
                     minQtyMetafieldId: node.minQtyMetafield?.id || null
                 });
@@ -246,7 +298,8 @@ export const action = async ({ request }) => {
 
     let currentB2BCount = 0;
     skuMap.forEach(variant => {
-        if (variant.b2bPrice !== null && variant.b2bPrice > 0) {
+        const hasGroupPrices = Object.values(variant.groupPrices || {}).some((price) => Number(price) > 0);
+        if ((variant.b2bPrice !== null && variant.b2bPrice > 0) || hasGroupPrices) {
             currentB2BCount++;
         }
     });
@@ -290,6 +343,10 @@ export const action = async ({ request }) => {
             const compareAtPriceRaw = row["CompareAt Price"];
             const b2bPriceRaw = row["B2B Price"];
             const minQtyRaw = row["Min Qty"];
+            const groupPriceInputs = groupPriceFields.map((field) => ({
+                field,
+                rawValue: row[field.key],
+            })).filter(({ rawValue }) => rawValue !== undefined && rawValue !== null);
 
             let newPrice = null;
             if (priceRaw !== undefined && priceRaw !== null && String(priceRaw).trim() !== "") {
@@ -351,6 +408,27 @@ export const action = async ({ request }) => {
                 }
             }
 
+            const newGroupPrices = {};
+            let hasInvalidGroupPrice = false;
+            for (const { field, rawValue } of groupPriceInputs) {
+                const trimmed = String(rawValue).trim();
+
+                if (trimmed.toLowerCase() === "null") {
+                    newGroupPrices[field.customerTag] = 0;
+                } else if (trimmed !== "") {
+                    const parsed = parseFloat(trimmed);
+                    if (isNaN(parsed)) {
+                        results.errors.push(`Skipped SKU ${sku}: Invalid ${field.label} value '${rawValue}'`);
+                        results.failedRows.push(normalizeRow(row, { "Error Reason": `Invalid ${field.label} value` }));
+                        hasInvalidGroupPrice = true;
+                        break;
+                    }
+                    newGroupPrices[field.customerTag] = parsed;
+                }
+            }
+
+            if (hasInvalidGroupPrice) continue;
+
 
             if (processedCombinations.has(skuKey)) {
                 results.errors.push(`Skipped SKU ${sku}: Duplicate SKU in file`);
@@ -396,6 +474,7 @@ export const action = async ({ request }) => {
             }
 
             let minQtyUpdated = false;
+            let groupB2BUpdated = false;
             variantInput.metafields = [];
 
             if (newB2BPrice !== null && variantData.b2bPrice !== newB2BPrice) {
@@ -428,6 +507,39 @@ export const action = async ({ request }) => {
                 minQtyUpdated = true;
             }
 
+            const hasGroupPriceInput = Object.keys(newGroupPrices).length > 0;
+            let nextGroupPrices = { ...(variantData.groupPrices || {}) };
+
+            if (hasGroupPriceInput) {
+                Object.entries(newGroupPrices).forEach(([customerTag, price]) => {
+                    if (price <= 0) {
+                        delete nextGroupPrices[customerTag];
+                    } else {
+                        nextGroupPrices[customerTag] = price;
+                    }
+                });
+
+                nextGroupPrices = Object.entries(nextGroupPrices).reduce((acc, [customerTag, price]) => {
+                    if (Number(price) > 0) acc[customerTag] = Number(price);
+                    return acc;
+                }, {});
+
+                if (JSON.stringify(nextGroupPrices) !== JSON.stringify(variantData.groupPrices || {})) {
+                    variantInput.metafields.push(variantData.groupPriceMetafieldId ? {
+                        id: variantData.groupPriceMetafieldId,
+                        value: JSON.stringify(nextGroupPrices),
+                        type: "json"
+                    } : {
+                        namespace: "$app",
+                        key: "gd_b2b_group_prices",
+                        value: JSON.stringify(nextGroupPrices),
+                        type: "json"
+                    });
+                    needsUpdate = true;
+                    groupB2BUpdated = true;
+                }
+            }
+
             if (variantInput.metafields.length === 0) {
                 delete variantInput.metafields;
             }
@@ -439,10 +551,12 @@ export const action = async ({ request }) => {
 
             let b2bLimitReached = false;
 
-            if (b2bUpdated) {
+            if (b2bUpdated || groupB2BUpdated) {
                 const oldB2BPrice = variantData.b2bPrice;
-                const isAddingMeaningfulB2BPrice = (oldB2BPrice === null || oldB2BPrice <= 0) && newB2BPrice > 0;
-                const isRemovingMeaningfulB2BPrice = (oldB2BPrice !== null && oldB2BPrice > 0) && (newB2BPrice === null || newB2BPrice <= 0);
+                const hadAnyB2BPrice = (oldB2BPrice !== null && oldB2BPrice > 0) || Object.values(variantData.groupPrices || {}).some((price) => Number(price) > 0);
+                const willHaveAnyB2BPrice = (newB2BPrice !== null ? newB2BPrice > 0 : oldB2BPrice !== null && oldB2BPrice > 0) || Object.values(nextGroupPrices || {}).some((price) => Number(price) > 0);
+                const isAddingMeaningfulB2BPrice = !hadAnyB2BPrice && willHaveAnyB2BPrice;
+                const isRemovingMeaningfulB2BPrice = hadAnyB2BPrice && !willHaveAnyB2BPrice;
                 
                 if (isRemovingMeaningfulB2BPrice) {
                     currentB2BCount--;
@@ -454,9 +568,15 @@ export const action = async ({ request }) => {
                     if (availableSlots <= 0) {
                         // Limit reached - remove B2B price from update but continue with other prices
                         b2bLimitReached = true;
-                        variantInput.metafields = variantInput.metafields.filter(m => m.key !== "gd_b2b_price" && m.id !== variantData.b2bMetafieldId);
+                        variantInput.metafields = variantInput.metafields.filter(m => (
+                            m.key !== "gd_b2b_price" &&
+                            m.key !== "gd_b2b_group_prices" &&
+                            m.id !== variantData.b2bMetafieldId &&
+                            m.id !== variantData.groupPriceMetafieldId
+                        ));
                         if (variantInput.metafields.length === 0) delete variantInput.metafields;
                         b2bUpdated = false; // Mark as not updated
+                        groupB2BUpdated = false;
                         results.limitReachedCount++;
                     } else {
                         currentB2BCount++;
@@ -467,7 +587,7 @@ export const action = async ({ request }) => {
             }
 
             // Check if we still have any updates after potentially removing B2B
-            const hasRemainingUpdates = priceUpdated || compareAtUpdated || b2bUpdated || minQtyUpdated;
+            const hasRemainingUpdates = priceUpdated || compareAtUpdated || b2bUpdated || groupB2BUpdated || minQtyUpdated;
             
             if (!hasRemainingUpdates && b2bLimitReached) {
                 // Only B2B was being updated and it was blocked by limit
@@ -480,6 +600,7 @@ export const action = async ({ request }) => {
             if (compareAtUpdated) results.updatedCompareAt++;
             if (minQtyUpdated) results.updatedMinQty++;
             if (b2bUpdated) results.updatedB2B++;
+            if (groupB2BUpdated) results.updatedGroupB2B++;
 
             // Track which columns were updated
             const updatedColumns = [];
@@ -487,6 +608,7 @@ export const action = async ({ request }) => {
             if (compareAtUpdated) updatedColumns.push('CompareAt Price updated');
             if (minQtyUpdated) updatedColumns.push('Min Qty updated');
             if (b2bUpdated) updatedColumns.push('B2B Price updated');
+            if (groupB2BUpdated) updatedColumns.push('Group B2B prices updated');
             
             // Add to updated rows with simple reason
             results.updatedRows.push(normalizeRow(row, { 
@@ -619,6 +741,7 @@ export const action = async ({ request }) => {
 };
 
 export default function ImportProductPrices() {
+    const { groups = [] } = useLoaderData();
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const pollFetcher = useFetcher(); 
@@ -640,6 +763,7 @@ export default function ImportProductPrices() {
     const skippedRowsPerPage = 10;
     const [updatedPage, setUpdatedPage] = useState(1);
     const updatedRowsPerPage = 10;
+    const importFields = [...IMPORT_FIELDS, ...buildGroupImportFields(groups)];
 
     const isLoading = fetcher.state === "submitting" || fetcher.state === "loading";
 
@@ -683,7 +807,7 @@ export default function ImportProductPrices() {
                 setParsedData(jsonData);
                 const headersInOrder = headers.filter(h => h); // Remove empty entries
                 setHeadersInOrder(headersInOrder);
-                setColumnMapping(Object.fromEntries(IMPORT_FIELDS.map(field => [field.key, guessColumn(headersInOrder, field)])));
+                setColumnMapping(Object.fromEntries(importFields.map(field => [field.key, guessColumn(headersInOrder, field)])));
                 shopify.toast.show(`File loaded: ${jsonData.length} rows. Review the column mapping before importing.`, { duration: 5000 });
             };
             reader.readAsArrayBuffer(selectedFile);
@@ -760,6 +884,7 @@ export default function ImportProductPrices() {
                            updatedCompareAt: validatedResults.updatedCompareAt || 0,
                            updatedMinQty: validatedResults.updatedMinQty || 0,
                            updatedB2B: validatedResults.updatedB2B || 0,
+                           updatedGroupB2B: validatedResults.updatedGroupB2B || 0,
                            errors: [...validatedResults.errors, ...bulkRes.errors]
                        };
                        setFinalResults(merged);
@@ -820,11 +945,11 @@ export default function ImportProductPrices() {
                         </div>
                         <div>
                             <h3>Optional columns</h3>
-                            <p className="panel-copy">Price, Compare-at Price, Min Qty, and B2B Price can be mapped from any column names in your file.</p>
+                            <p className="panel-copy">Price, Compare-at Price, Min Qty, B2B Price, and group price columns can be mapped from your file.</p>
                         </div>
                         <div>
-                            <h3>Blank cells</h3>
-                            <p className="panel-copy">Blank optional cells are ignored. Use <strong>null</strong> to clear compare-at, minimum quantity, or B2B price where supported.</p>
+                            <h3>Group price columns</h3>
+                            <p className="panel-copy">Use columns like <strong>B2B_gold Price</strong> or <strong>Distributor Price</strong>. Blank optional cells are ignored; use <strong>null</strong> to clear values.</p>
                         </div>
                     </div>
                     <input
@@ -850,7 +975,7 @@ export default function ImportProductPrices() {
                 <s-box paddingBlockStart="large">
                     <s-section heading="Map columns">
                         <div className="mapping-grid">
-                            {IMPORT_FIELDS.map((field) => (
+                            {importFields.map((field) => (
                                 <label key={field.key}>
                                     {field.label} {field.required ? "(required)" : "(optional)"}
                                     <select
@@ -900,6 +1025,7 @@ export default function ImportProductPrices() {
                                 <s-text as="p">Successfully updated CompareAt Price: {displayResults.updatedCompareAt || 0}</s-text>
                                 <s-text as="p">Successfully updated Min Qty: {displayResults.updatedMinQty || 0}</s-text>
                                 <s-text as="p">Successfully updated B2B Price: {displayResults.updatedB2B || 0}</s-text>
+                                <s-text as="p">Successfully updated Group B2B Prices: {displayResults.updatedGroupB2B || 0}</s-text>
                                 <s-text as="p">Errors: {displayResults.errors.length}</s-text>
                             </s-stack>
                         </s-section>

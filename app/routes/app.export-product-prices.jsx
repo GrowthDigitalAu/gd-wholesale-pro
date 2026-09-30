@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 import ExcelJS from "exceljs";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { ProgressBar } from "@shopify/polaris";
@@ -52,7 +53,11 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
+    const groups = await db.wholesaleGroup.findMany({
+        where: { shop: session.shop, isActive: true },
+        orderBy: [{ name: "asc" }],
+    });
 
     // 1. Cancel existing operation if any (skip if this fails)
     try {
@@ -115,6 +120,9 @@ export const action = async ({ request }) => {
                                             minQtyMetafield: metafield(namespace: "$app", key: "gd_b2b_min_qty") {
                                                 value
                                             }
+                                            groupPriceMetafield: metafield(namespace: "$app", key: "gd_b2b_group_prices") {
+                                                value
+                                            }
                                         }
                                     }
                                 }
@@ -145,7 +153,12 @@ export const action = async ({ request }) => {
     return { 
         success: true, 
         status: "CREATED", 
-        operationId: result.data.bulkOperationRunQuery.bulkOperation.id 
+        operationId: result.data.bulkOperationRunQuery.bulkOperation.id,
+        groups: groups.map((group) => ({
+            name: group.name,
+            customerTag: group.customerTag,
+            column: `${group.customerTag} Price`,
+        }))
     };
 };
 
@@ -158,6 +171,7 @@ export default function ExportProductData() {
     const [isProgressVisible, setIsProgressVisible] = useState(false);
     const [currentExportOpId, setCurrentExportOpId] = useState(null);
     const [statusMessage, setStatusMessage] = useState("");
+    const [exportGroups, setExportGroups] = useState([]);
 
     const isLoading = fetcher.state === "submitting" || fetcher.state === "loading" || !!currentExportOpId;
 
@@ -173,6 +187,7 @@ export default function ExportProductData() {
         if (fetcher.data?.success && fetcher.data?.status === "CREATED") {
             const opId = fetcher.data.operationId;
             setCurrentExportOpId(opId);
+            setExportGroups(fetcher.data.groups || []);
             setStatusMessage("Processing export...");
             shopify.toast.show("Export started...", { duration: 5000 });
             pollFetcher.load(`/app/export-product-prices?checkStatus=true&operationId=${opId}`);
@@ -262,6 +277,20 @@ export default function ExportProductData() {
 
                         let minQty = obj.minQtyMetafield?.value ? parseInt(obj.minQtyMetafield.value, 10) : null;
                         if (minQty === 0) minQty = null;
+                        let groupPrices = {};
+                        if (obj.groupPriceMetafield?.value) {
+                            try {
+                                groupPrices = JSON.parse(obj.groupPriceMetafield.value);
+                            } catch {
+                                groupPrices = {};
+                            }
+                        }
+
+                        const groupColumns = {};
+                        exportGroups.forEach((group) => {
+                            const value = Number(groupPrices[group.customerTag]);
+                            groupColumns[group.column] = value > 0 ? value : null;
+                        });
 
                         rows.push({
                             "Product Title": product?.title || "Unknown",
@@ -272,7 +301,8 @@ export default function ExportProductData() {
                             "Price": obj.price ? parseFloat(obj.price) : null,
                             "CompareAt Price": obj.compareAtPrice ? parseFloat(obj.compareAtPrice) : null,
                             "Min Qty": minQty,
-                            "B2B Price": b2bPrice
+                            "B2B Price": b2bPrice,
+                            ...groupColumns
                         });
                     }
                 } catch (e) {
@@ -290,7 +320,8 @@ export default function ExportProductData() {
                     "Price": "",
                     "CompareAt Price": "",
                     "Min Qty": "",
-                    "B2B Price": ""
+                    "B2B Price": "",
+                    ...Object.fromEntries(exportGroups.map((group) => [group.column, ""]))
                  });
             }
 
