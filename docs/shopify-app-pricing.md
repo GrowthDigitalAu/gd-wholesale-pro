@@ -42,6 +42,17 @@ For live stores, the Subscription menu and /app/subscription open Shopify's
 hosted pricing page. Existing welcome links to /app/subscription containing
 plan_handle return verified subscribers to /app to avoid a pricing-page loop.
 Verify the hosted pricing URL uses this app's actual listing handle.
+
+## App handle change
+
+shopify.app.toml sets the requested App Home handle to gd-wholesale-pro.
+Run shopify app deploy from this repository with the Shopify CLI signed into
+the organization that owns this app. Dokploy deployment does not publish this
+Shopify configuration. Confirm the app opens under /apps/gd-wholesale-pro and
+that /charges/gd-wholesale-pro/pricing_plans works. Only after that confirmation,
+set SHOPIFY_APP_PRICING_HANDLE=gd-wholesale-pro in Dokploy and redeploy.
+The billing link retains its existing handle by default during this transition.
+Update any saved links or welcome URLs containing /apps/gd-priceupdator-pro.
 Migration of existing contracts must be completed in the Partner Dashboard or
 Shopify CLI; deploying this code does not migrate contracts.
 

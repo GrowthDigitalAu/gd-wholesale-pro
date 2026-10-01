@@ -2,6 +2,7 @@
 
 client_id = "e5c4c7ddfaddf3322cef406b333dfcd3"
 name = "GD: Wholesale Pro"
+handle = "gd-wholesale-pro"
 application_url = "https://gd-wholesale-pro.growthdigital.com.au/"
 embedded = true
 
