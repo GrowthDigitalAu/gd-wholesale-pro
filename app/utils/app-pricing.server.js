@@ -7,6 +7,27 @@ const ACTIVE_SUBSCRIPTION_QUERY = `query ActiveSubscription($appId: ID!, $shopId
   }
 }`;
 
+export async function describePartnerFailure(response, token) {
+  let detail = "No JSON error message returned";
+  try {
+    const body = await response.json();
+    const errors = body.errors;
+    const messages = typeof errors === "string" ? [errors]
+      : Array.isArray(errors) ? errors.map((error) => typeof error === "string" ? error : error.message)
+      : [body.error_description, typeof body.error === "string" ? body.error : body.error?.message, body.message];
+    const text = messages.filter((message) => typeof message === "string").join("; ");
+    if (text) detail = text;
+  } catch {
+    // Do not log HTML pages or arbitrary response bodies.
+  }
+  const safeDetail = detail.split(token).join("[redacted]")
+    .replace(/sh[a-z]+_[A-Za-z0-9_-]+/g, "[redacted]")
+    .replace(/[\r\n\t]/g, " ").slice(0, 600);
+  const requestId = response.headers?.get("x-request-id");
+  const safeRequestId = requestId && /^[a-zA-Z0-9-]{1,100}$/.test(requestId) ? requestId : "unavailable";
+  return `Partner subscription request failed (${response.status}): ${safeDetail}. Shopify request ID: ${safeRequestId}`;
+}
+
 export function normalizeSubscription(contract, planHandles = {}) {
   if (!contract) return null;
   const item = contract.items?.find((entry) => entry.price?.active);
@@ -92,10 +113,10 @@ export async function getAppSubscription({ admin }) {
       signal: AbortSignal.timeout(10000),
     },
   );
-  if (!response.ok)
-    throw new Error(
-      `Partner subscription request failed (${response.status}).`,
-    );
+  if (!response.ok) {
+    const details = await describePartnerFailure(response, token);
+    throw new Error(`${details}. Partner organization: ${orgId}; API version: ${version}`);
+  }
   const json = await response.json();
   if (
     json.errors?.length ||

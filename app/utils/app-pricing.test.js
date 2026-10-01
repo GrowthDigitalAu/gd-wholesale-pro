@@ -5,7 +5,25 @@ import { test } from "node:test";
 import {
   getAppSubscription,
   normalizeSubscription,
+  describePartnerFailure,
 } from "./app-pricing.server.js";
+
+test("HTTP diagnostics preserve Shopify errors and request ID without tokens", async () => {
+  const message = await describePartnerFailure({ status: 401,
+    headers: { get: () => "abc-123" },
+    json: async () => ({ errors: "Invalid API client test-token shpat_secret123" }),
+  }, "test-token");
+  assert.match(message, /401.*Invalid API client/);
+  assert.match(message, /abc-123/);
+  assert.ok(!message.includes("test-token"));
+  assert.ok(!message.includes("shpat_secret123"));
+});
+
+test("non-JSON upstream pages are never logged", async () => {
+  const message = await describePartnerFailure({ status: 401, json: async () => { throw new Error("HTML page with private data"); } }, "test-token");
+  assert.match(message, /No JSON error message/);
+  assert.ok(!message.includes("private data"));
+});
 
 test("free contracts and $0 test prices retain plan identity", () => {
   assert.equal(normalizeSubscription(null), null);
