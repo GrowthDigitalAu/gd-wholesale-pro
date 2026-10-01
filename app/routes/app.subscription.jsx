@@ -1,4 +1,4 @@
-import { getAppBillingResponse } from "../utils/app-pricing.server";
+import { getAppBillingResponse, getPricingPlansUrl } from "../utils/app-pricing.server";
 import { useState } from "react";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import {
@@ -43,7 +43,7 @@ const PLAN_FEATURES = [
 ];
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
 
   const billingCheck = await getAppBillingResponse(admin);
 
@@ -51,12 +51,17 @@ export const loader = async ({ request }) => {
   const activeSubscriptions =
     billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
   
-  const shopName = session.shop.replace(".myshopify.com", "");
+  const manageUrl = getPricingPlansUrl(session.shop);
+  if (new URL(request.url).searchParams.has("plan_handle") && activeSubscriptions.length > 0) {
+    return redirect("/app");
+  }
+  if (activeSubscriptions[0]?.source !== "development") {
+    return redirect(manageUrl, { target: "_top" });
+  }
 
   return {
     subscription: activeSubscriptions[0] || null,
-    // eslint-disable-next-line no-undef
-    manageUrl: `https://admin.shopify.com/store/${shopName}/charges/${process.env.SHOPIFY_APP_PRICING_HANDLE || "gd-priceupdator-pro"}/pricing_plans`,
+    manageUrl,
   };
 };
 
@@ -178,7 +183,10 @@ export default function SubscriptionPage() {
                 <Text as="p" variant="bodySm" tone={subscription.status === 'ACTIVE' ? 'success' : 'critical'}>
                   Status: {subscription.status}
                 </Text>
-                {subscription.test && (
+                {subscription.source === "development" && (
+                  <Text as="p" variant="bodyMd">Free development access with unlimited groups and pricing variants. No subscription is required while Shopify identifies this as a development store. When it moves to a live plan, select an app plan and approve any available trial through Shopify.</Text>
+                )}
+                {subscription.test && subscription.source !== "development" && (
                   <Text as="p" variant="bodySm" tone="subdued">
                     (Test Charge)
                   </Text>
@@ -216,15 +224,15 @@ export default function SubscriptionPage() {
 
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd">
-                {subscription 
+                {subscription?.source === "development" ? "You can continue setting up and testing your wholesale store for free." : subscription
                   ? "Change or cancel your plan below." 
                   : "You need a subscription to use this app."}
               </Text>
               
               <BlockStack gap="200" inlineAlign="start">
-                <Button url={manageUrl} target="_top" variant="primary">
+                {subscription?.source !== "development" && <Button url={manageUrl} target="_top" variant="primary">
                   {subscription ? "Change Plan" : "Choose a Plan"}
-                </Button>
+                </Button>}
                 
                 {subscription?.source === "billing_api" && (
                   <Button tone="critical" onClick={handleCancel} loading={isSubmitting}>

@@ -7,6 +7,12 @@ const ACTIVE_SUBSCRIPTION_QUERY = `query ActiveSubscription($appId: ID!, $shopId
   }
 }`;
 
+export function getPricingPlansUrl(shop) {
+  const storeHandle = shop.replace(/\.myshopify\.com$/, "");
+  const appHandle = process.env.SHOPIFY_APP_PRICING_HANDLE?.trim() || "gd-priceupdator-pro";
+  return `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${encodeURIComponent(appHandle)}/pricing_plans`;
+}
+
 export async function describePartnerFailure(response, token) {
   let detail = "No JSON error message returned";
   try {
@@ -53,6 +59,17 @@ export function normalizeSubscription(contract, planHandles = {}) {
 }
 
 export async function getAppSubscription({ admin }) {
+  const shopResponse = await admin.graphql(
+    `query SubscriptionShop { shop { id plan { partnerDevelopment } } }`,
+  );
+  const shopJson = await shopResponse.json();
+  const shop = shopJson.data?.shop;
+  if (shopJson.errors?.length || !shop?.id || typeof shop.plan?.partnerDevelopment !== "boolean") {
+    throw new Error("Unable to verify store development status.");
+  }
+  if (shop.plan.partnerDevelopment) {
+    return [{ id: null, name: "Development preview", status: "ACTIVE", source: "development", test: true }];
+  }
   // Credentials belong to the Partner organization, never to a merchant session.
   const {
     SHOPIFY_PARTNER_ORG_ID: orgId,
@@ -62,16 +79,7 @@ export async function getAppSubscription({ admin }) {
     SHOPIFY_APP_PRICING_PLAN_HANDLES: handles = "{}",
   } = Object.fromEntries(Object.entries(process.env).map(([key, value]) => [key, value?.trim()]));
   if (!orgId && !token && !appId) {
-    const response = await admin.graphql(`query LegacySubscription {
-      currentAppInstallation { activeSubscriptions { id name status test } }
-    }`);
-    const json = await response.json();
-    if (json.errors?.length || !json.data?.currentAppInstallation) {
-      throw new Error("Unable to verify legacy subscription.");
-    }
-    return json.data.currentAppInstallation.activeSubscriptions
-      .filter((subscription) => subscription.status === "ACTIVE")
-      .map((subscription) => ({ ...subscription, source: "billing_api" }));
+    return getLegacySubscriptions(admin);
   }
   if (
     !orgId ||
@@ -85,13 +93,6 @@ export async function getAppSubscription({ admin }) {
   }
   if (!/^(\d+|gid:\/\/shopify\/App\/\d+)$/.test(appId)) {
     throw new Error("Invalid SHOPIFY_PARTNER_APP_ID. Use the numeric Partner app ID, not the OAuth client ID.");
-  }
-  const shopResponse = await admin.graphql(
-    `query SubscriptionShop { shop { id } }`,
-  );
-  const shopJson = await shopResponse.json();
-  if (shopJson.errors?.length || !shopJson.data?.shop?.id) {
-    throw new Error("Unable to verify subscription shop.");
   }
   const response = await fetch(
     `https://partners.shopify.com/${orgId}/api/${version}/graphql.json`,
@@ -132,7 +133,22 @@ export async function getAppSubscription({ admin }) {
     json.data.activeSubscription,
     JSON.parse(handles),
   );
-  return subscription ? [subscription] : [];
+  // A successful null managed contract can still have an existing Billing API
+  // subscription. Never use this fallback for authentication or API failures.
+  return subscription ? [subscription] : getLegacySubscriptions(admin);
+}
+
+async function getLegacySubscriptions(admin) {
+  const response = await admin.graphql(`query LegacySubscription {
+    currentAppInstallation { activeSubscriptions { id name status test } }
+  }`);
+  const json = await response.json();
+  if (json.errors?.length || !json.data?.currentAppInstallation) {
+    throw new Error("Unable to verify legacy subscription.");
+  }
+  return json.data.currentAppInstallation.activeSubscriptions
+    .filter((subscription) => subscription.status === "ACTIVE" && subscription.test === false)
+    .map((subscription) => ({ ...subscription, source: "billing_api" }));
 }
 
 // Adapter keeps existing route response shapes while consolidating billing reads.

@@ -5,6 +5,7 @@ const VIP_STORES = {
 };
 
 export function getVariantLimitForPlan(planName, shop) {
+    if (planName === "Development preview") return null;
     const vip = VIP_STORES[shop];
     if (vip) {
         const today = new Date();
@@ -28,6 +29,7 @@ export function getVariantLimitForPlan(planName, shop) {
 }
 
 export function getGroupLimitForPlan(planName) {
+    if (planName === "Development preview") return null;
     if (!planName) return 1;
 
     const lowerPlan = planName.toLowerCase();

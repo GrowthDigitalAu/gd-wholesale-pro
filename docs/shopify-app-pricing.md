@@ -5,6 +5,20 @@ variables absent, existing Billing API reads remain available during migration.
 Partial configuration or API failures stop verification; they never silently
 grant access or trigger a downgrade.
 
+A successful Partner API response with no contract also checks existing active,
+non-test Billing API subscriptions, so existing live merchants need not approve
+a second subscription. API errors do not trigger this compatibility lookup.
+
+Shopify's shop.plan.partnerDevelopment flag grants free development preview
+with unlimited groups and variants, without selecting an app plan. The flag is
+checked on every billing read. Once it becomes false, preview access ends and
+the merchant needs a verified live subscription. Trial duration is configured
+in Shopify's Partner Dashboard, not started or reset by this app.
+Store ownership transfer alone is not used as a billing signal; Shopify must
+stop identifying the store as a development store.
+If no live subscription exists, saved pricing and groups are preserved while
+the merchant selects a plan. Selecting a lower plan applies the downgrade policy.
+
 ## Dokploy environment
 
 - SHOPIFY_PARTNER_ORG_ID: numeric organization ID from your Partner Dashboard URL.
@@ -22,8 +36,11 @@ plans on development stores may cost $0.
 ## Partner Dashboard
 
 Enable Shopify App Pricing and configure the existing Free, Startup, Growth,
-and Expand plans. Set each welcome link to /app/subscription. Shopify appends
+and Expand plans. Set each welcome link to /app. Shopify appends
 plan_handle; the app verifies the plan with the API rather than trusting the URL.
+For live stores, the Subscription menu and /app/subscription open Shopify's
+hosted pricing page. Existing welcome links to /app/subscription containing
+plan_handle return verified subscribers to /app to avoid a pricing-page loop.
 Verify the hosted pricing URL uses this app's actual listing handle.
 Migration of existing contracts must be completed in the Partner Dashboard or
 Shopify CLI; deploying this code does not migrate contracts.

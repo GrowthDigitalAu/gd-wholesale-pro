@@ -1,4 +1,4 @@
-import { getAppBillingResponse } from "../utils/app-pricing.server";
+import { getAppBillingResponse, getPricingPlansUrl } from "../utils/app-pricing.server";
 import { Outlet, useLoaderData, useRouteError, Link, useLocation, useNavigate, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -20,6 +20,7 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
 
   let hasActiveSubscription = false;
+  let developmentPreview = false;
 
   try {
     const billingCheck = await getAppBillingResponse(admin);
@@ -27,10 +28,11 @@ export const loader = async ({ request }) => {
     const billingJson = await billingCheck.json();
     const activeSubscriptions =
       billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
+    developmentPreview = activeSubscriptions[0]?.source === "development";
     const shopId = billingJson.data?.shop?.id;
 
     const verifiedPlan = activeSubscriptions[0]?.name || "Free";
-    if (billingJson.data.shop.metafield?.value !== verifiedPlan) {
+    if (activeSubscriptions.length > 0 && billingJson.data.shop.metafield?.value !== verifiedPlan) {
       await enforceSubscriptionLimits({ admin, shop: session.shop, subscription: activeSubscriptions[0] || null });
     }
 
@@ -86,11 +88,11 @@ export const loader = async ({ request }) => {
   }
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", hasActiveSubscription };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", hasActiveSubscription, developmentPreview, pricingPlansUrl: getPricingPlansUrl(session.shop) };
 };
 
 export default function App() {
-  const { apiKey, hasActiveSubscription } = useLoaderData();
+  const { apiKey, hasActiveSubscription, developmentPreview, pricingPlansUrl } = useLoaderData();
   const navigate = useNavigate();
   const location = useLocation();
   const navigation = useNavigation();
@@ -122,7 +124,9 @@ export default function App() {
         <s-link href="/app/b2b-pricing">Wholesale Pricing</s-link>
         <s-link href="/app/import-product-prices">Import Prices</s-link>
         <s-link href="/app/export-product-prices">Export Prices</s-link>
-        <s-link href="/app/subscription">Subscription</s-link>
+        {developmentPreview
+          ? <s-link href="/app/subscription">Development preview</s-link>
+          : <s-link href={pricingPlansUrl} target="_top">Subscription</s-link>}
         <s-link href="/app/how-to-use">Setup Guide</s-link>
       </NavMenu>
       <PolarisAppProvider i18n={translations} linkComponent={LinkAdapter}>

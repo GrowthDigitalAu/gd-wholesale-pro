@@ -6,6 +6,6 @@ export const action = async ({ request }) => {
   const { admin, shop } = await authenticate.webhook(request);
   if (!admin) return new Response(null, { status: 200 });
   const subscriptions = await getAppSubscription({ admin });
-  await enforceSubscriptionLimits({ admin, shop, subscription: subscriptions[0] || null });
+  if (subscriptions.length) await enforceSubscriptionLimits({ admin, shop, subscription: subscriptions[0] });
   return new Response(null, { status: 200 });
 };
