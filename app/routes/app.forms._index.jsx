@@ -1,3 +1,4 @@
+import { getAppBillingResponse } from "../utils/app-pricing.server";
 import { useLoaderData, Link, useRouteError, useSubmit, useActionData, useNavigate, useNavigation, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { EmptyState, Pagination, Modal } from "@shopify/polaris";
@@ -37,19 +38,7 @@ export const loader = async ({ request }) => {
     const { session, admin } = await authenticate.admin(request);
     
     // Check for active subscription to prevent slow DB loading for unbilled users
-    const billingCheck = await admin.graphql(
-      `#graphql
-        query {
-          currentAppInstallation {
-            activeSubscriptions {
-              id
-              status
-              test
-            }
-          }
-        }
-      `
-    );
+    const billingCheck = await getAppBillingResponse(admin);
 
     const billingJson = await billingCheck.json();
     const activeSubscriptions =

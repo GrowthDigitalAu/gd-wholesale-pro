@@ -1,3 +1,4 @@
+import { getAppBillingResponse } from "../utils/app-pricing.server";
 import { useState, useEffect, useRef } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -224,16 +225,7 @@ export const action = async ({ request }) => {
     let hasNextPage = true;
     let endCursor = null;
 
-    const billingCheck = await admin.graphql(
-        `#graphql
-        query {
-            currentAppInstallation {
-                activeSubscriptions {
-                    name
-                }
-            }
-        }`
-    );
+    const billingCheck = await getAppBillingResponse(admin);
 
     const billingJson = await billingCheck.json();
     const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];

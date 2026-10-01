@@ -1,3 +1,4 @@
+import { getAppBillingResponse } from "../utils/app-pricing.server";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -9,17 +10,7 @@ const normalizeTag = (value) => String(value || "").trim().replace(/\s+/g, "_");
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
 
-  const billingCheck = await admin.graphql(
-    `#graphql
-    query {
-      currentAppInstallation {
-        activeSubscriptions {
-          name
-          status
-        }
-      }
-    }`
-  );
+  const billingCheck = await getAppBillingResponse(admin);
   const billingJson = await billingCheck.json();
   const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
   const planName = activeSubscriptions[0]?.name || null;
@@ -60,16 +51,7 @@ export const action = async ({ request }) => {
   const intent = formData.get("intent");
   const id = formData.get("id") ? Number(formData.get("id")) : null;
 
-  const billingCheck = await admin.graphql(
-    `#graphql
-    query {
-      currentAppInstallation {
-        activeSubscriptions {
-          name
-        }
-      }
-    }`
-  );
+  const billingCheck = await getAppBillingResponse(admin);
   const billingJson = await billingCheck.json();
   const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
   const planName = activeSubscriptions[0]?.name || null;

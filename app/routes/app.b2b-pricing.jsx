@@ -1,3 +1,4 @@
+import { getAppBillingResponse } from "../utils/app-pricing.server";
 import { useState, useEffect } from "react";
 import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -33,18 +34,7 @@ export const loader = async ({ request }) => {
     const query = rawQuery ? `(title:*${rawQuery}* OR sku:*${rawQuery}*)` : "";
 
 
-    const billingCheck = await admin.graphql(
-        `#graphql
-        query {
-            currentAppInstallation {
-                activeSubscriptions {
-                    id
-                    name
-                    status
-                }
-            }
-        }`
-    );
+    const billingCheck = await getAppBillingResponse(admin);
 
     const billingJson = await billingCheck.json();
     const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
@@ -189,16 +179,7 @@ export const action = async ({ request }) => {
         const updates = JSON.parse(bulkUpdates);
 
 
-        const billingCheck = await admin.graphql(
-            `#graphql
-            query {
-                currentAppInstallation {
-                    activeSubscriptions {
-                        name
-                    }
-                }
-            }`
-        );
+        const billingCheck = await getAppBillingResponse(admin);
 
         const billingJson = await billingCheck.json();
         const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
@@ -323,16 +304,7 @@ export const action = async ({ request }) => {
     if (bulkGroupUpdates) {
         const groupUpdates = JSON.parse(bulkGroupUpdates);
 
-        const billingCheck = await admin.graphql(
-            `#graphql
-            query {
-                currentAppInstallation {
-                    activeSubscriptions {
-                        name
-                    }
-                }
-            }`
-        );
+        const billingCheck = await getAppBillingResponse(admin);
 
         const billingJson = await billingCheck.json();
         const activeSubscriptions = billingJson.data?.currentAppInstallation?.activeSubscriptions || [];

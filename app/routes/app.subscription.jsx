@@ -1,5 +1,6 @@
+import { getAppBillingResponse } from "../utils/app-pricing.server";
 import { useState } from "react";
-import { useLoaderData, useSubmit, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import {
   Text,
   Button,
@@ -44,20 +45,7 @@ const PLAN_FEATURES = [
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
 
-  const billingCheck = await admin.graphql(
-    `#graphql
-      query {
-        currentAppInstallation {
-          activeSubscriptions {
-            id
-            name
-            status
-            test
-          }
-        }
-      }
-    `
-  );
+  const billingCheck = await getAppBillingResponse(admin);
 
   const billingJson = await billingCheck.json();
   const activeSubscriptions =
@@ -67,7 +55,8 @@ export const loader = async ({ request }) => {
 
   return {
     subscription: activeSubscriptions[0] || null,
-    manageUrl: `https://admin.shopify.com/store/${shopName}/charges/gd-priceupdator-pro/pricing_plans`,
+    // eslint-disable-next-line no-undef
+    manageUrl: `https://admin.shopify.com/store/${shopName}/charges/${process.env.SHOPIFY_APP_PRICING_HANDLE || "gd-priceupdator-pro"}/pricing_plans`,
   };
 };
 
@@ -75,6 +64,11 @@ export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const subscriptionId = formData.get("subscriptionId");
+  const billing = await getAppBillingResponse(admin);
+  const verified = (await billing.json()).data.currentAppInstallation.activeSubscriptions[0];
+  if (!verified || verified.source !== "billing_api" || verified.id !== subscriptionId) {
+    return { error: "Manage this subscription on Shopify's plan selection page." };
+  }
 
   if (!subscriptionId) {
     return { error: "Subscription ID is required" };
@@ -103,7 +97,13 @@ export const action = async ({ request }) => {
     }
   );
 
-  // Sync metafield to false
+  const responseJson = await response.json();
+  const errors = responseJson.data?.appSubscriptionCancel?.userErrors;
+  if (responseJson.errors?.length || !responseJson.data?.appSubscriptionCancel?.appSubscription || errors?.length) {
+    return { error: errors?.[0]?.message || "Unable to cancel your subscription. Please try again." };
+  }
+
+  // Sync only after Shopify confirms cancellation.
   try {
      const shopQuery = await admin.graphql(`query { shop { id } }`);
      const shopJson = await shopQuery.json();
@@ -136,18 +136,12 @@ export const action = async ({ request }) => {
     console.error("Failed to sync metafield on cancel:", e);
   }
 
-  const responseJson = await response.json();
-  const errors = responseJson.data?.appSubscriptionCancel?.userErrors;
-
-  if (errors && errors.length > 0) {
-    return { error: errors[0].message };
-  }
-
   return { success: true };
 };
 
 export default function SubscriptionPage() {
   const { subscription, manageUrl } = useLoaderData();
+  const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const [modalOpen, setModalOpen] = useState(false);
@@ -174,6 +168,7 @@ export default function SubscriptionPage() {
             <Text as="h2" variant="headingMd">
               Current Plan
             </Text>
+            {actionData?.error && <Text as="p" tone="critical">{actionData.error}</Text>}
             
             {subscription ? (
               <Box>
@@ -188,6 +183,9 @@ export default function SubscriptionPage() {
                     (Test Charge)
                   </Text>
                 )}
+                {subscription.trialEndsAt && <Text as="p">Trial ends: {new Date(subscription.trialEndsAt).toLocaleDateString()}</Text>}
+                {subscription.cancelAtEndOfCycle && <Text as="p">Cancellation scheduled for the end of your billing cycle.</Text>}
+                {subscription.pendingUpdate && <Text as="p">A plan change is scheduled for your next billing cycle. Current limits apply until then.</Text>}
               </Box>
             ) : (
               <Text as="p" tone="critical">
@@ -228,7 +226,7 @@ export default function SubscriptionPage() {
                   {subscription ? "Change Plan" : "Choose a Plan"}
                 </Button>
                 
-                {subscription && (
+                {subscription?.source === "billing_api" && (
                   <Button tone="critical" onClick={handleCancel} loading={isSubmitting}>
                     Cancel Subscription
                   </Button>

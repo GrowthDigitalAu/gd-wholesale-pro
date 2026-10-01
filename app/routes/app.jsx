@@ -1,3 +1,4 @@
+import { getAppBillingResponse } from "../utils/app-pricing.server";
 import { Outlet, useLoaderData, useRouteError, Link, useLocation, useNavigate, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -8,6 +9,7 @@ import appStyles from "../styles/app.css?url";
 import translations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
 import { useEffect } from "react";
+import { enforceSubscriptionLimits } from "../utils/subscription-sync.server";
 
 export const links = () => [
   { rel: "stylesheet", href: polarisStyles },
@@ -20,32 +22,22 @@ export const loader = async ({ request }) => {
   let hasActiveSubscription = false;
 
   try {
-    const billingCheck = await admin.graphql(
-      `#graphql
-        query {
-          currentAppInstallation {
-            activeSubscriptions {
-              id
-              status
-              test
-            }
-          }
-          shop {
-            id
-          }
-        }
-      `
-    );
+    const billingCheck = await getAppBillingResponse(admin);
 
     const billingJson = await billingCheck.json();
     const activeSubscriptions =
       billingJson.data?.currentAppInstallation?.activeSubscriptions || [];
     const shopId = billingJson.data?.shop?.id;
 
+    const verifiedPlan = activeSubscriptions[0]?.name || "Free";
+    if (billingJson.data.shop.metafield?.value !== verifiedPlan) {
+      await enforceSubscriptionLimits({ admin, shop: session.shop, subscription: activeSubscriptions[0] || null });
+    }
+
     const isActive = activeSubscriptions.length > 0;
 
     if (shopId) {
-      await admin.graphql(
+      const syncResponse = await admin.graphql(
         `#graphql
         mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
           metafieldsSet(metafields: $metafields) {
@@ -64,11 +56,22 @@ export const loader = async ({ request }) => {
                 key: "subscription_active",
                 type: "single_line_text_field",
                 value: isActive ? "true" : "false"
+              },
+              {
+                ownerId: shopId,
+                namespace: "gd_price_updator",
+                key: "verified_plan",
+                type: "single_line_text_field",
+                value: verifiedPlan
               }
             ]
           }
         }
       );
+      const syncJson = await syncResponse.json();
+      if (syncJson.errors?.length || !syncJson.data?.metafieldsSet || syncJson.data.metafieldsSet.userErrors?.length) {
+        throw new Error("Unable to sync subscription state.");
+      }
     }
 
     if (activeSubscriptions.length > 0) {
@@ -78,7 +81,8 @@ export const loader = async ({ request }) => {
     if (error instanceof Response) {
       throw error;
     }
-    console.error("Billing check failed:", error);
+    console.error("Billing check failed:", error.message);
+    throw new Response("Unable to verify your plan. Please try again shortly.", { status: 503 });
   }
 
   // eslint-disable-next-line no-undef
