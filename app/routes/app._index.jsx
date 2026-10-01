@@ -126,8 +126,8 @@ export default function Index() {
           </s-section>
           <s-section heading="Bulk price files">
             <div className="action-panel">
-              <p className="panel-copy">Import or export retail, compare-at, minimum quantity, and B2B price data using Excel.</p>
-              <s-link href="/app/import-product-prices">Open import</s-link>
+              <p className="panel-copy">Open a group&apos;s pricing to import, export, or download its price template. Wholesale Pricing also includes files for all groups.</p>
+              <s-link href="/app/groups">Open groups</s-link>
             </div>
           </s-section>
         </div>

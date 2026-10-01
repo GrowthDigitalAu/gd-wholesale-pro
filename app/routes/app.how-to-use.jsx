@@ -49,7 +49,7 @@ export default function HowToUse() {
                                 <span>4</span>
                                 <div>
                                     <strong>Set wholesale pricing</strong>
-                                    <p>Select Default B2B price or a wholesale group in Wholesale Pricing, then enter the variant prices for that price list.</p>
+                                    <p>Open Wholesale Groups, choose Pricing beside an active group, then enter variant prices or select Import. Download the Excel template with SKU and Wholesale Price columns. Export downloads the same format for that group.</p>
                                 </div>
                             </div>
                             <div className="help-step">
@@ -113,11 +113,12 @@ export default function HowToUse() {
                 </s-box>
 
                 <s-box paddingBlockStart="large">
-                    <s-section heading="Import file columns">
+                    <s-section heading="Group imports and exports">
+                        <p className="panel-copy">Go to Wholesale Groups, choose Pricing, then Import, Export, or Download Template. Each group file uses SKU and Wholesale Price. Blank prices are ignored; null or 0 clears only that group&apos;s price. Use Import All Groups or Export All Groups in Wholesale Pricing for a combined file.</p>
                         <div className="import-guide-grid">
                             <div>
                                 <h3>Required</h3>
-                                <p className="panel-copy"><strong>SKU</strong> must be present or mapped. It identifies the Shopify variant to update.</p>
+                                <p className="panel-copy"><strong>SKU</strong> identifies the variant. A group import also requires <strong>Wholesale Price</strong>. Use an Excel .xlsx workbook with headers in the first row.</p>
                             </div>
                             <div>
                                 <h3>Optional price fields</h3>
@@ -144,7 +145,7 @@ export default function HowToUse() {
                                 <span>2</span>
                                 <div>
                                     <strong>Map columns</strong>
-                                    <p>Map your file columns to SKU, Price, Compare-at Price, Min Qty, B2B Price, and any active group price columns before importing.</p>
+                                    <p>For a group, map SKU and Wholesale Price. All-group imports additionally support retail, compare-at, minimum quantity, default B2B, and group price columns.</p>
                                 </div>
                             </div>
                             <div className="help-step">

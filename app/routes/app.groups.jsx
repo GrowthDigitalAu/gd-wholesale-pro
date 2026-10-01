@@ -302,6 +302,7 @@ export default function WholesaleGroups() {
                         </s-table-cell>
                         <s-table-cell>
                           <div className="button-row">
+                            {group.isActive && <s-button href={`/app/b2b-pricing?group=${group.id}`} size="slim">Pricing</s-button>}
                             <s-button
                               size="slim"
                               onClick={() => submitIntent({ intent: "toggle", id: String(group.id) })}

@@ -7,6 +7,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { Pagination, Banner, InlineStack, Text } from "@shopify/polaris";
 import { getVariantLimitForPlan } from "../utils/subscription";
 import { getVariantsWithB2BPrices } from "../utils/b2b-pricing.server";
+import { selectTransferGroup } from "../utils/group-price-transfer";
+import { downloadPriceTemplate } from "../utils/price-template.client";
 
 function parseGroupPrices(value) {
     if (!value) return {};
@@ -45,6 +47,7 @@ export const loader = async ({ request }) => {
         where: { shop: session.shop, isActive: true },
         orderBy: [{ name: "asc" }],
     });
+    selectTransferGroup(request.url, groups);
 
     let queryVariables = {
         first: 10,
@@ -170,6 +173,14 @@ export const action = async ({ request }) => {
     const bulkUpdates = formData.get("bulkUpdates");
     const bulkMinQty = formData.get("bulkMinQty");
     const bulkGroupUpdates = formData.get("bulkGroupUpdates");
+    if (bulkGroupUpdates) {
+        const activeGroups = await db.wholesaleGroup.findMany({ where: { shop: session.shop, isActive: true } });
+        const group = selectTransferGroup(request.url, activeGroups);
+        const allowedTags = new Set(activeGroups.map((entry) => entry.customerTag));
+        if (JSON.parse(bulkGroupUpdates).some((update) => !allowedTags.has(update.customerTag) || (group && update.customerTag !== group.customerTag))) {
+            return { success: false, error: "Choose an active wholesale group before saving prices." };
+        }
+    }
     
     let totalSaved = 0;
     let totalSkipped = 0;
@@ -458,7 +469,13 @@ export default function B2BPricing() {
     const [selectedVariants, setSelectedVariants] = useState({});
     const [isStylesLoaded, setIsStylesLoaded] = useState(false);
     const [priceEntryTimestamps, setPriceEntryTimestamps] = useState({});
-    const [selectedPriceList, setSelectedPriceList] = useState("default");
+    const selectedPriceList = groups.find((group) => String(group.id) === searchParams.get("group"))?.customerTag || "default";
+    const setSelectedPriceList = (tag) => {
+        const params = new URLSearchParams(searchParams);
+        const group = groups.find((entry) => entry.customerTag === tag);
+        if (group) params.set("group", String(group.id)); else params.delete("group");
+        navigate(`?${params.toString()}`);
+    };
 
 
     const [searchTerm, setSearchTerm] = useState(searchParams.get("query") || "");
@@ -785,15 +802,16 @@ export default function B2BPricing() {
         }
 
         if (Object.keys(payload).length > 0) {
-            fetcher.submit(payload, { method: "POST" });
+            fetcher.submit(payload, { method: "POST", action: `/app/b2b-pricing${selectedGroup ? `?group=${selectedGroup.id}` : ""}` });
         } else {
             shopify.toast.show("No changes to save on this page");
         }
     };
 
     return (
-        <s-page heading="Wholesale Pricing" inlineSize="large">
+        <s-page heading={selectedGroup ? `${selectedGroup.name} Pricing` : "Wholesale Pricing"} inlineSize="large">
             <div className="page-frame">
+                {fetcher.data?.error && <div className="feedback-banner is-critical">{fetcher.data.error}</div>}
                 <div className="dashboard-hero">
                     <div>
                         <h2>Set fixed wholesale prices and minimum quantities by variant.</h2>
@@ -855,6 +873,12 @@ export default function B2BPricing() {
                 )}
                 <s-box paddingBlockEnd="large">
                     <s-section heading="Price list">
+                        <div className="button-row">
+                            <s-button href="/app/groups">Groups</s-button>
+                            <s-button href={`/app/import-product-prices${selectedGroup ? `?group=${selectedGroup.id}` : ""}`}>{selectedGroup ? "Import" : "Import All Groups"}</s-button>
+                            <s-button href={`/app/export-product-prices${selectedGroup ? `?group=${selectedGroup.id}` : ""}`}>{selectedGroup ? "Export" : "Export All Groups"}</s-button>
+                            <s-button onClick={() => downloadPriceTemplate(groups, selectedGroup)}>Download Template</s-button>
+                        </div>
                         <div className="section-toolbar">
                             <p className="panel-copy">
                                 Choose Default B2B price for one shared manual price, or choose a wholesale group to set manual prices just for that group.

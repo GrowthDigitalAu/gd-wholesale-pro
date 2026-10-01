@@ -122,8 +122,6 @@ export default function App() {
         <s-link href="/app/forms">Wholesale Applications</s-link>
         <s-link href="/app/groups">Wholesale Groups</s-link>
         <s-link href="/app/b2b-pricing">Wholesale Pricing</s-link>
-        <s-link href="/app/import-product-prices">Import Prices</s-link>
-        <s-link href="/app/export-product-prices">Export Prices</s-link>
         {developmentPreview
           ? <s-link href="/app/subscription">Development preview</s-link>
           : <s-link href={pricingPlansUrl} target="_top">Subscription</s-link>}

@@ -7,6 +7,8 @@ import ExcelJS from "exceljs";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Pagination, ProgressBar } from "@shopify/polaris";
 import { getVariantLimitForPlan } from "../utils/subscription";
+import { selectTransferGroup, scopedImportFields } from "../utils/group-price-transfer";
+import { downloadPriceTemplate } from "../utils/price-template.client";
 
 const IMPORT_FIELDS = [
     {
@@ -150,7 +152,7 @@ export const loader = async ({ request }) => {
         orderBy: [{ name: "asc" }],
     });
 
-    return { success: true, groups };
+    return { success: true, groups, selectedGroup: selectTransferGroup(request.url, groups) };
 };
 
 export const action = async ({ request }) => {
@@ -160,7 +162,8 @@ export const action = async ({ request }) => {
         where: { shop: session.shop, isActive: true },
         orderBy: [{ name: "asc" }],
     });
-    const importFields = [...IMPORT_FIELDS, ...buildGroupImportFields(groups)];
+    const selectedGroup = selectTransferGroup(request.url, groups);
+    const importFields = scopedImportFields(IMPORT_FIELDS, buildGroupImportFields(groups), selectedGroup);
     const groupPriceFields = importFields.filter((field) => field.key.startsWith("GROUP_PRICE:"));
     const dataString = formData.get("data");
     const headersString = formData.get("headers");
@@ -168,10 +171,13 @@ export const action = async ({ request }) => {
     const rawRows = JSON.parse(dataString);
     const headersFromFrontend = headersString ? JSON.parse(headersString) : null;
     const columnMapping = mappingString ? JSON.parse(mappingString) : {};
+    if (selectedGroup && importFields.some((field) => field.required && !columnMapping[field.key])) {
+        return { success: false, error: "Map both SKU and Wholesale Price before importing." };
+    }
     const rows = rawRows.map((row) => {
         const normalizedRow = {};
         importFields.forEach((field) => {
-            const sourceColumn = columnMapping[field.key] || field.key;
+            const sourceColumn = Object.prototype.hasOwnProperty.call(columnMapping, field.key) ? columnMapping[field.key] : field.key;
             normalizedRow[field.key] = sourceColumn ? row[sourceColumn] : undefined;
         });
         return normalizedRow;
@@ -733,7 +739,7 @@ export const action = async ({ request }) => {
 };
 
 export default function ImportProductPrices() {
-    const { groups = [] } = useLoaderData();
+    const { groups = [], selectedGroup } = useLoaderData();
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const pollFetcher = useFetcher(); 
@@ -755,7 +761,9 @@ export default function ImportProductPrices() {
     const skippedRowsPerPage = 10;
     const [updatedPage, setUpdatedPage] = useState(1);
     const updatedRowsPerPage = 10;
-    const importFields = [...IMPORT_FIELDS, ...buildGroupImportFields(groups)];
+    const importFields = scopedImportFields(IMPORT_FIELDS, buildGroupImportFields(groups), selectedGroup);
+    const pricingUrl = `/app/b2b-pricing${selectedGroup ? `?group=${selectedGroup.id}` : ""}`;
+    const downloadTemplate = () => downloadPriceTemplate(groups, selectedGroup);
 
     const isLoading = fetcher.state === "submitting" || fetcher.state === "loading";
 
@@ -823,8 +831,8 @@ export default function ImportProductPrices() {
             return;
         }
 
-        if (!columnMapping["SKU"]) {
-            shopify.toast.show("Map the SKU column before importing.", { isError: true });
+        if (importFields.some((field) => field.required && !columnMapping[field.key])) {
+            shopify.toast.show(selectedGroup ? "Map SKU and Wholesale Price before importing." : "Map the SKU column before importing.", { isError: true });
             return;
         }
 
@@ -834,11 +842,14 @@ export default function ImportProductPrices() {
             data: JSON.stringify(parsedData),
             headers: JSON.stringify(headersInOrder),
             mapping: JSON.stringify(columnMapping)
-        }, { method: "POST" });
+        }, { method: "POST", action: `/app/import-product-prices${selectedGroup ? `?group=${selectedGroup.id}` : ""}` });
     };
 
     // --- HANDLE ACTION RESPONSE ---
     useEffect(() => {
+        if (fetcher.data?.error && fetcher.state === "idle") {
+            setIsProgressVisible(false);
+        }
         if (fetcher.data?.success && fetcher.state === "idle") {
             const res = fetcher.data.results;
             setValidatedResults(res);
@@ -919,8 +930,13 @@ export default function ImportProductPrices() {
     const displayResults = finalResults || validatedResults;
 
     return (
-        <s-page heading="Import Prices" inlineSize="large">
+        <s-page heading={selectedGroup ? `Import ${selectedGroup.name} Prices` : "Import All Groups"} inlineSize="large">
             <div className="page-frame">
+            <div className="button-row">
+                <s-button href={pricingUrl}>Back to Pricing</s-button>
+                <s-button onClick={downloadTemplate}>Download Template</s-button>
+            </div>
+            {fetcher.data?.error && <div className="feedback-banner is-critical">{fetcher.data.error}</div>}
             <div className="workflow-strip">
                 <div className={`workflow-step ${file ? "is-complete" : "is-active"}`}><span>1</span><strong>Choose file</strong></div>
                 <div className={`workflow-step ${validatedResults ? "is-complete" : parsedData ? "is-active" : ""}`}><span>2</span><strong>Map columns</strong></div>
@@ -933,21 +949,21 @@ export default function ImportProductPrices() {
                     <div className="import-guide-grid">
                         <div>
                             <h3>Required column</h3>
-                            <p className="panel-copy"><strong>SKU</strong> is required. It is used to match each row to a Shopify variant.</p>
+                            <p className="panel-copy"><strong>SKU</strong>{selectedGroup ? " and Wholesale Price are required. Only this group's prices will change." : " is required. It is used to match each row to a Shopify variant."}</p>
                         </div>
                         <div>
-                            <h3>Optional columns</h3>
-                            <p className="panel-copy">Price, Compare-at Price, Min Qty, B2B Price, and group price columns can be mapped from your file.</p>
+                            <h3>{selectedGroup ? selectedGroup.name : "Optional columns"}</h3>
+                            <p className="panel-copy">{selectedGroup ? `Prices are assigned to ${selectedGroup.customerTag}. Other groups and retail prices stay unchanged.` : "Price, Compare-at Price, Min Qty, B2B Price, and group price columns can be mapped from your file."}</p>
                         </div>
                         <div>
                             <h3>Group price columns</h3>
-                            <p className="panel-copy">Use columns like <strong>B2B_gold Price</strong> or <strong>Distributor Price</strong>. Blank optional cells are ignored; use <strong>null</strong> to clear values.</p>
+                            <p className="panel-copy">{selectedGroup ? "Use the Wholesale Price column. Blank prices are ignored; null or 0 clears this group's price." : "Use columns like B2B_gold Price or Distributor Price. Blank optional cells are ignored; use null to clear values."}</p>
                         </div>
                     </div>
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".xlsx,.xls"
+                        accept=".xlsx"
                         onChange={handleFileChange}
                         style={{ display: 'none' }}
                     />

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import ExcelJS from "exceljs";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { ProgressBar } from "@shopify/polaris";
+import { selectTransferGroup, groupExportRow } from "../utils/group-price-transfer";
 
 export const loader = async ({ request }) => {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const url = new URL(request.url);
     const checkStatus = url.searchParams.get("checkStatus");
     const operationId = url.searchParams.get("operationId");
@@ -49,7 +50,8 @@ export const loader = async ({ request }) => {
         }
     }
 
-    return { success: true };
+    const groups = await db.wholesaleGroup.findMany({ where: { shop: session.shop, isActive: true } });
+    return { success: true, selectedGroup: selectTransferGroup(request.url, groups) };
 };
 
 export const action = async ({ request }) => {
@@ -58,6 +60,7 @@ export const action = async ({ request }) => {
         where: { shop: session.shop, isActive: true },
         orderBy: [{ name: "asc" }],
     });
+    const selectedGroup = selectTransferGroup(request.url, groups);
 
     // 1. Cancel existing operation if any (skip if this fails)
     try {
@@ -154,6 +157,7 @@ export const action = async ({ request }) => {
         success: true, 
         status: "CREATED", 
         operationId: result.data.bulkOperationRunQuery.bulkOperation.id,
+        selectedGroup,
         groups: groups.map((group) => ({
             name: group.name,
             customerTag: group.customerTag,
@@ -163,6 +167,7 @@ export const action = async ({ request }) => {
 };
 
 export default function ExportProductData() {
+    const { selectedGroup } = useLoaderData();
     const shopify = useAppBridge();
     const fetcher = useFetcher();
     const pollFetcher = useFetcher();
@@ -172,6 +177,7 @@ export default function ExportProductData() {
     const [currentExportOpId, setCurrentExportOpId] = useState(null);
     const [statusMessage, setStatusMessage] = useState("");
     const [exportGroups, setExportGroups] = useState([]);
+    const [exportGroup, setExportGroup] = useState(null);
 
     const isLoading = fetcher.state === "submitting" || fetcher.state === "loading" || !!currentExportOpId;
 
@@ -179,7 +185,7 @@ export default function ExportProductData() {
         setProgress(0);
         setStatusMessage("Starting export...");
         setIsProgressVisible(true);
-        fetcher.submit({}, { method: "POST" });
+        fetcher.submit({}, { method: "POST", action: `/app/export-product-prices${selectedGroup ? `?group=${selectedGroup.id}` : ""}` });
     };
 
     // Detect Start
@@ -188,6 +194,7 @@ export default function ExportProductData() {
             const opId = fetcher.data.operationId;
             setCurrentExportOpId(opId);
             setExportGroups(fetcher.data.groups || []);
+            setExportGroup(fetcher.data.selectedGroup || null);
             setStatusMessage("Processing export...");
             shopify.toast.show("Export started...", { duration: 5000 });
             pollFetcher.load(`/app/export-product-prices?checkStatus=true&operationId=${opId}`);
@@ -252,7 +259,7 @@ export default function ExportProductData() {
                 try {
                     const obj = JSON.parse(line);
                     
-                    if (obj.id && obj.id.includes("Product") && !obj.sku) {
+                    if (obj.id && obj.id.includes("/Product/")) {
                         productsMap.set(obj.id, { title: obj.title });
                     } else if (obj.id && obj.id.includes("ProductVariant")) {
                         const parentId = obj.__parentId;
@@ -292,7 +299,7 @@ export default function ExportProductData() {
                             groupColumns[group.column] = value > 0 ? value : null;
                         });
 
-                        rows.push({
+                        rows.push(exportGroup ? groupExportRow(obj.sku, groupPrices, exportGroup) : {
                             "Product Title": product?.title || "Unknown",
                             "SKU": obj.sku || "",
                             "Option1 Value": options["Option1 Value"],
@@ -311,7 +318,7 @@ export default function ExportProductData() {
             });
 
             if (rows.length === 0) {
-                 rows.push({
+                 rows.push(exportGroup ? groupExportRow("", {}, exportGroup) : {
                     "Product Title": "No data found",
                     "SKU": "",
                     "Option1 Value": "",
@@ -340,7 +347,7 @@ export default function ExportProductData() {
             
             const a = document.createElement("a");
             a.href = blobUrl;
-            a.download = "product_prices_export.xlsx";
+            a.download = exportGroup ? `group-${exportGroup.id}-prices.xlsx` : "all-group-prices.xlsx";
             a.click();
             URL.revokeObjectURL(blobUrl);
 
@@ -370,10 +377,11 @@ export default function ExportProductData() {
 
 
     return (
-        <s-page heading="Export Prices" inlineSize="large">
+        <s-page heading={selectedGroup ? `Export ${selectedGroup.name} Prices` : "Export All Groups"} inlineSize="large">
             <div className="page-frame">
+            <s-button href={`/app/b2b-pricing${selectedGroup ? `?group=${selectedGroup.id}` : ""}`}>Back to Pricing</s-button>
             <s-box paddingBlockEnd="large">
-                <s-section heading='Export product, retail, and wholesale price data to Excel.'>
+                <s-section heading={selectedGroup ? `${selectedGroup.name}: SKU and Wholesale Price` : "All group prices"}>
                     <s-button
                         variant="primary"
                         onClick={handleExport}
