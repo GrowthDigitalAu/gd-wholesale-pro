@@ -11,8 +11,9 @@ export function normalizeSubscription(contract, planHandles = {}) {
   if (!contract) return null;
   const item = contract.items?.find((entry) => entry.price?.active);
   if (!item) throw new Error("Subscription has no active pricing item.");
-  const name = planHandles[item.handle] || item.description || item.handle;
-  if (!/\b(free|startup|growth|expand)\b/i.test(name.replace(/_/g, " "))) {
+  const name = [planHandles[item.handle], item.handle, item.description]
+    .find((candidate) => typeof candidate === "string" && /\b(free|startup|growth|expand)\b/i.test(candidate.replace(/_/g, " ")));
+  if (!name) {
     throw new Error(
       "Unknown subscription plan. Configure SHOPIFY_APP_PRICING_PLAN_HANDLES.",
     );
@@ -38,7 +39,7 @@ export async function getAppSubscription({ admin }) {
     SHOPIFY_PARTNER_APP_ID: appId,
     SHOPIFY_PARTNER_API_VERSION: version = "2026-07",
     SHOPIFY_APP_PRICING_PLAN_HANDLES: handles = "{}",
-  } = process.env;
+  } = Object.fromEntries(Object.entries(process.env).map(([key, value]) => [key, value?.trim()]));
   if (!orgId && !token && !appId) {
     const response = await admin.graphql(`query LegacySubscription {
       currentAppInstallation { activeSubscriptions { id name status test } }
@@ -58,7 +59,11 @@ export async function getAppSubscription({ admin }) {
     !/^\d+$/.test(orgId) ||
     !/^\d{4}-\d{2}$/.test(version)
   ) {
-    throw new Error("Incomplete or invalid Partner API configuration.");
+    const missing = [!orgId && "SHOPIFY_PARTNER_ORG_ID", !token && "SHOPIFY_PARTNER_API_ACCESS_TOKEN", !appId && "SHOPIFY_PARTNER_APP_ID"].filter(Boolean);
+    throw new Error(missing.length ? `Missing Partner API configuration: ${missing.join(", ")}` : "Invalid Partner organization ID or API version. Use the numeric organization ID and YYYY-MM API version.");
+  }
+  if (!/^(\d+|gid:\/\/shopify\/App\/\d+)$/.test(appId)) {
+    throw new Error("Invalid SHOPIFY_PARTNER_APP_ID. Use the numeric Partner app ID, not the OAuth client ID.");
   }
   const shopResponse = await admin.graphql(
     `query SubscriptionShop { shop { id } }`,
@@ -97,7 +102,10 @@ export async function getAppSubscription({ admin }) {
     !json.data ||
     !("activeSubscription" in json.data)
   ) {
-    throw new Error("Partner API could not verify subscription.");
+    // Shopify's response identifies permission/schema/enrollment failures. Keep
+    // it in server logs and remove the access token if it is ever echoed.
+    const details = (json.errors || []).map((error) => String(error.message || "Unknown GraphQL error").split(token).join("[redacted]")).join("; ");
+    throw new Error(`Partner API could not verify subscription: ${details || "Missing subscription data"}`);
   }
   const subscription = normalizeSubscription(
     json.data.activeSubscription,

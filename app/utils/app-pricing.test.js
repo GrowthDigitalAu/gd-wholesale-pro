@@ -19,7 +19,7 @@ test("free contracts and $0 test prices retain plan identity", () => {
         },
       ],
     }).name,
-    "Growth",
+    "growth_yearly",
   );
   assert.equal(
     normalizeSubscription(
@@ -33,6 +33,10 @@ test("free contracts and $0 test prices retain plan identity", () => {
       items: [{ handle: "unknown", price: { active: true } }],
     }),
   );
+});
+
+test("recognized handles work when the description is marketing text", () => {
+  assert.equal(normalizeSubscription({ items: [{ handle: "startup_monthly", description: "Build your wholesale business", price: { active: true } }] }).name, "startup_monthly");
 });
 
 test("scheduled changes retain current plan until effective", () => {
@@ -79,6 +83,14 @@ test("configured Partner API null is authoritative and failures never fall back"
     assert.deepEqual(await getAppSubscription({ admin }), []);
     globalThis.fetch = async () => ({ ok: false, status: 503 });
     await assert.rejects(getAppSubscription({ admin }));
+    process.env.SHOPIFY_PARTNER_ORG_ID = " 123 ";
+    process.env.SHOPIFY_PARTNER_APP_ID = " 456 ";
+    globalThis.fetch = async (url, options) => {
+      assert.ok(url.includes("/123/api/"));
+      assert.equal(JSON.parse(options.body).variables.appId, "gid://shopify/App/456");
+      return { ok: true, json: async () => ({ errors: [{ message: "Access denied test-token" }] }) };
+    };
+    await assert.rejects(getAppSubscription({ admin }), (error) => error.message.includes("Access denied [redacted]") && !error.message.includes("test-token"));
   } finally {
     globalThis.fetch = originalFetch;
     keys.forEach((key, index) => {
