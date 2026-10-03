@@ -124,6 +124,12 @@ export default function Index() {
               <s-link href="/app/b2b-pricing">Open pricing</s-link>
             </div>
           </s-section>
+          <s-section heading="Wholesale quick ordering">
+            <div className="action-panel">
+              <p className="panel-copy">Add the Wholesale Quick Order app block to a store page so approved buyers can order several variants together.</p>
+              <s-link href="/app/how-to-use">Quick-order setup</s-link>
+            </div>
+          </s-section>
           <s-section heading="Bulk price files">
             <div className="action-panel">
               <p className="panel-copy">Open a group&apos;s pricing to import, export, or download its price template. Wholesale Pricing also includes files for all groups.</p>

@@ -1,0 +1,64 @@
+{% assign approved = false %}
+{% for tag in customer.tags %}
+  {% assign normalized_tag = tag | downcase %}
+  {% if normalized_tag == 'b2b_approved' %}{% assign approved = true %}{% endif %}
+{% endfor %}
+{% assign rules = shop.metafields.gd_wholesale_pro.group_rules.value.groups %}
+{% assign matched_group = nil %}
+{% for rule in rules %}
+  {% if customer.tags contains rule.customerTag %}
+    {% assign matched_group = rule %}
+    {% break %}
+  {% endif %}
+{% endfor %}
+<gd-quick-order class="gd-quick-order" {{ block.shopify_attributes }}>
+  <h2>{{ block.settings.heading | escape }}</h2>
+  {% if shop.metafields.gd_price_updator.subscription_active != 'true' %}
+    <p>Wholesale ordering is currently unavailable.</p>
+  {% elsif customer == nil %}
+    <p><a href="{{ routes.account_login_url }}">Sign in</a> to view wholesale ordering.</p>
+  {% elsif approved == false %}
+    <p>Your account needs wholesale approval before placing a wholesale order.</p>
+  {% elsif block.settings.collection == blank %}
+    <p>No wholesale collection is available yet.</p>
+  {% else %}
+    <p>{% if matched_group %}{{ matched_group.name | escape }}{% else %}Wholesale{% endif %} price list</p>
+    <label>Filter this page by product or SKU <input type="search" data-search></label>
+    <p>Displayed prices are estimates. Cart and checkout confirm discounts, minimum quantities and taxes.</p>
+    {% paginate block.settings.collection.products by 20 %}
+      <div class="gd-quick-order-scroll">
+        <table><thead><tr><th scope="col">Product / variant</th><th scope="col">SKU</th><th scope="col">Unit price</th><th scope="col">Availability</th><th scope="col">Quantity</th></tr></thead><tbody>
+        {% for product in block.settings.collection.products %}
+          {% for variant in product.variants %}
+            {% assign minimum = variant.metafields['$app'].gd_b2b_min_qty.value | default: 1 | at_least: 1 %}
+            {% assign target = variant.metafields['$app'].gd_b2b_price.value | times: 100 %}
+            {% if matched_group %}
+              {% assign group_price = variant.metafields['$app'].gd_b2b_group_prices.value[matched_group.customerTag] | times: 100 %}
+              {% if group_price > 0 %}{% assign target = group_price %}{% endif %}
+              {% if matched_group.pricingMethod == 'PERCENTAGE_OFF' and matched_group.discountValue > 0 and matched_group.discountValue < 100 %}
+                {% assign multiplier = 100 | minus: matched_group.discountValue %}
+                {% assign target = variant.price | times: multiplier | divided_by: 100.0 | round %}
+              {% endif %}
+            {% endif %}
+            {% assign unit_price = variant.price %}
+            {% if cart.currency.iso_code == shop.currency and target > 0 and target < variant.price %}{% assign unit_price = target %}{% endif %}
+            <tr data-variant="{{ variant.id }}" data-unit-price="{{ unit_price }}" data-minimum="{{ minimum }}">
+              <td><div class="gd-quick-product">{% if product.featured_image %}{{ product.featured_image | image_url: width: 100 | image_tag: loading: 'lazy', width: 50, height: 50 }}{% endif %}<div><a href="{{ product.url }}?variant={{ variant.id }}">{{ product.title | escape }}</a>{% unless variant.title == 'Default Title' %}<small>{{ variant.title | escape }}</small>{% endunless %}</div></div></td>
+              <td>{{ variant.sku | escape }}</td><td>{{ unit_price | money_with_currency }}{% if minimum > 1 %}<small>Minimum {{ minimum }}</small>{% endif %}</td>
+              <td>{% if variant.available %}Available{% else %}Sold out{% endif %}</td>
+              <td><input type="number" min="0" step="1" value="0" data-quantity aria-label="Quantity for {{ product.title | escape }} {{ variant.title | escape }}" {% unless variant.available %}disabled{% endunless %}></td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+        </tbody></table>
+      </div>
+      {% if paginate.pages > 1 %}<nav aria-label="Wholesale products pages">{{ paginate | default_pagination }}</nav>{% endif %}
+    {% endpaginate %}
+    <p data-empty hidden>No products match this filter.</p>
+    <div class="gd-quick-order-actions"><strong data-total>0 units selected</strong><button type="button" data-add>Add selected to cart</button><a href="{{ routes.cart_url }}">View cart</a></div>
+    <p role="status" aria-live="polite" data-status></p>
+  {% endif %}
+</gd-quick-order>
+{% schema %}
+{"name":"Wholesale Quick Order","target":"section","stylesheet":"b2b-quick-order.css","javascript":"b2b-quick-order.js","settings":[{"type":"text","id":"heading","label":"Heading","default":"Wholesale quick order"},{"type":"collection","id":"collection","label":"Wholesale collection"}]}
+{% endschema %}

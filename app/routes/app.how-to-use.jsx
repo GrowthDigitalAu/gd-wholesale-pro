@@ -21,6 +21,12 @@ export default function HowToUse() {
 
                 <s-box paddingBlockStart="large" />
 
+                <s-section heading="Wholesale quick-order page">
+                    <p className="panel-copy">Create a Wholesale Order page in Online Store, then open its page template in the Theme Editor. Add the Wholesale Quick Order app block, select a collection, and save. Assign that template to your page and add the page to your store navigation. Modern themes do not require manual code edits; older themes may need app-block support.</p>
+                    <p className="panel-copy">Buyers must sign in with an approved wholesale account. They can filter products or SKUs on the displayed page, enter quantities across variants, and add the selection to their cart. The selected collection shows 20 products per page; add each page&apos;s selection before moving to another page. Minimum quantities are shown beside prices.</p>
+                    <p className="panel-copy">Prices are estimates until cart and checkout apply the active discount rules. Fixed wholesale price estimates are shown in the store&apos;s base currency; other currencies show retail estimates pending checkout conversion. Keep the GD: Wholesale Pro app embed enabled for the existing storefront pricing and cart controls, and verify that the wholesale discount function is active before launch.</p>
+                </s-section>
+                <s-box paddingBlockStart="large" />
                 <div className="help-layout">
                     <s-section heading="Recommended setup path">
                         <div className="help-steps">
