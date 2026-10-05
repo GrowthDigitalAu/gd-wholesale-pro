@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../../extensions/b2b-price/assets/b2b-quick-order.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../scripts/b2b-quick-order.js', import.meta.url), 'utf8');
 function setup(values, response = { ok: true, json: async () => ({ items: [] }) }, overrides = {}) {
   let component;
   const requests = [];

@@ -2,6 +2,10 @@
 
 This is a theme app extension block, not an admin bulk-order screen.
 
+Quick-order JavaScript source is in `scripts/b2b-quick-order.js`. Run
+`npm run build:quick-order` after editing it and before Shopify deployment.
+The generated asset is committed to keep direct CLI deployment reproducible.
+
 ## Publish and activate
 
 1. Run Shopify CLI theme checks and `shopify app deploy` from the app directory.

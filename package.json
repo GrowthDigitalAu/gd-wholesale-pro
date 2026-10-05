@@ -2,7 +2,8 @@
   "name": "gd-wholesale-pro",
   "private": true,
   "scripts": {
-    "build": "react-router build",
+    "build": "npm run build:quick-order && react-router build",
+    "build:quick-order": "terser scripts/b2b-quick-order.js --compress --mangle --output extensions/b2b-price/assets/b2b-quick-order.js",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
