@@ -27,3 +27,17 @@ test('pricing destination uses the live store and configured app handle', () => 
     else process.env.SHOPIFY_APP_PRICING_HANDLE = previous;
   }
 });
+
+test('missing and blank pricing overrides use the published Wholesale Pro handle', () => {
+  const previous = process.env.SHOPIFY_APP_PRICING_HANDLE;
+  try {
+    for (const value of [undefined, '', '   ']) {
+      if (value === undefined) delete process.env.SHOPIFY_APP_PRICING_HANDLE;
+      else process.env.SHOPIFY_APP_PRICING_HANDLE = value;
+      assert.equal(getPricingPlansUrl('uniform-link.myshopify.com'), 'https://admin.shopify.com/store/uniform-link/charges/gd-wholesale-pro/pricing_plans');
+    }
+  } finally {
+    if (previous === undefined) delete process.env.SHOPIFY_APP_PRICING_HANDLE;
+    else process.env.SHOPIFY_APP_PRICING_HANDLE = previous;
+  }
+});

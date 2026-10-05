@@ -7,9 +7,13 @@ const ACTIVE_SUBSCRIPTION_QUERY = `query ActiveSubscription($appId: ID!, $shopId
   }
 }`;
 
+export function getPricingAppHandle() {
+  return process.env.SHOPIFY_APP_PRICING_HANDLE?.trim() || "gd-wholesale-pro";
+}
+
 export function getPricingPlansUrl(shop) {
   const storeHandle = shop.replace(/\.myshopify\.com$/, "");
-  const appHandle = process.env.SHOPIFY_APP_PRICING_HANDLE?.trim() || "gd-priceupdator-pro";
+  const appHandle = getPricingAppHandle();
   return `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${encodeURIComponent(appHandle)}/pricing_plans`;
 }
 
