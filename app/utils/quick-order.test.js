@@ -5,20 +5,22 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../extensions/b2b-price/assets/b2b-quick-order.js', import.meta.url), 'utf8');
-function setup(values, response = { ok: true, json: async () => ({ items: [] }) }) {
+function setup(values, response = { ok: true, json: async () => ({ items: [] }) }, overrides = {}) {
   let component;
   const requests = [];
   vm.runInNewContext(source, {
     HTMLElement: class {},
     customElements: { get: () => false, define: (_, value) => { component = value; } },
-    window: { Shopify: { routes: { root: '/en-au/' } } },
-    fetch: async (url, options) => { requests.push({ url, body: JSON.parse(options.body) }); return response; },
+    window: { Shopify: { routes: { root: '/en-au/' } }, location: { href: 'https://shop.example/pages/wholesale' } },
+    URL,
+    fetch: async (url, options) => { requests.push({ url, body: options?.body ? JSON.parse(options.body) : null }); return response; },
+    ...overrides,
   });
   const widget = new component();
   widget.status = { textContent: '' };
   widget.button = { disabled: false };
   const total = { textContent: '' };
-  widget.querySelector = () => total;
+  widget.querySelector = selector => selector === '[data-total]' ? total : null;
   widget.rows = values.map((value, index) => {
     const input = { value: String(value.quantity), disabled: !!value.disabled, focus() { this.focused = true; } };
     return { dataset: { variant: String(index + 1), minimum: String(value.minimum || 1) }, querySelector: () => input };
@@ -57,4 +59,57 @@ test('cart rejection preserves quantities and releases controls', async () => {
   assert.equal(widget.rows[0].querySelector().value, '6');
   assert.equal(widget.rows[0].querySelector().readOnly, false);
   assert.equal(widget.busy, false);
+});
+
+test('client pagination retains selections outside the visible page', () => {
+  const { widget } = setup(Array.from({ length: 30 }, (_, i) => ({ quantity: i === 28 ? 7 : 0 })));
+  widget.rows.forEach((row, i) => { row.textContent = `Product SKU-${i}`; });
+  widget.query = '';
+  widget.page = 0;
+  widget.catalogComplete = true;
+  const elements = new Map();
+  widget.querySelector = selector => {
+    if (!elements.has(selector)) elements.set(selector, { replaceChildren(...rows) { this.rows = rows; } });
+    return elements.get(selector);
+  };
+  widget.showPage();
+  assert.equal(elements.get('tbody').rows.length, 25);
+  widget.page = 1;
+  widget.showPage();
+  assert.equal(elements.get('tbody').rows.length, 5);
+  assert.equal(widget.selectedItems()[0].quantity, 7);
+  widget.query = 'sku-28';
+  widget.page = 0;
+  widget.showPage();
+  assert.equal(elements.get('tbody').rows.length, 1);
+  assert.equal(widget.rows[28].querySelector().value, '7');
+});
+
+test('collection search loading deduplicates variants and preserves existing quantities', async () => {
+  const input = { value: '0', disabled: false };
+  const row = { dataset: { variant: '2' }, querySelector: () => input };
+  const block = { dataset: { customer: 'c', group: 'Gold' }, querySelector: () => ({}), querySelectorAll: () => [row] };
+  const { widget, requests } = setup([{ quantity: 8 }], { ok: true, text: async () => '<html></html>' }, { DOMParser: class { parseFromString() { return { getElementById: () => block }; } } });
+  widget.id = 'block';
+  widget.dataset = { customer: 'c', group: 'Gold' };
+  widget.catalog = { dataset: { pages: '2', pageParam: 'page_list' } };
+  widget.loadedPages = new Set([1]);
+  await widget.loadCatalog();
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /page_list=2/);
+  assert.equal(widget.rows.length, 2);
+  assert.equal(widget.rows[0].querySelector().value, '8');
+  assert.equal(widget.catalogComplete, true);
+  await widget.loadCatalog();
+  assert.equal(requests.length, 1);
+});
+
+test('catalog requests reject a changed customer session', async () => {
+  const block = { dataset: { customer: 'other', group: 'Gold' }, querySelector: () => ({}) };
+  const { widget } = setup([{ quantity: 3 }], { ok: true, text: async () => '' }, { DOMParser: class { parseFromString() { return { getElementById: () => block }; } } });
+  widget.dataset = { customer: 'c', group: 'Gold' };
+  widget.catalog = { dataset: { pages: '2', pageParam: 'page' } };
+  widget.loadedPages = new Set([1]);
+  await assert.rejects(widget.loadCatalog(), /session or price list changed/);
+  assert.equal(widget.rows.length, 1);
 });

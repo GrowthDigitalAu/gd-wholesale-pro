@@ -9,6 +9,7 @@ import { getVariantLimitForPlan } from "../utils/subscription";
 import { getVariantsWithB2BPrices } from "../utils/b2b-pricing.server";
 import { selectTransferGroup } from "../utils/group-price-transfer";
 import { downloadPriceTemplate } from "../utils/price-template.client";
+import { withPricingHistory } from "../utils/pricing-history.server";
 
 function parseGroupPrices(value) {
     if (!value) return {};
@@ -167,7 +168,9 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-    const { admin, session } = await authenticate.admin(request);
+    const context = await authenticate.admin(request);
+    const session = context.session;
+    const admin = withPricingHistory(context.admin, session, db);
     const formData = await request.formData();
 
     const bulkUpdates = formData.get("bulkUpdates");

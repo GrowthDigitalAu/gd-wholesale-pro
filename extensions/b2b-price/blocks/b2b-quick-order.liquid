@@ -11,7 +11,7 @@
     {% break %}
   {% endif %}
 {% endfor %}
-<gd-quick-order class="gd-quick-order" {{ block.shopify_attributes }}>
+<gd-quick-order id="gd-quick-order-{{ block.id }}" class="gd-quick-order" data-customer="{{ customer.id }}" data-group="{{ matched_group.customerTag | escape }}" data-proxy="{{ block.settings.proxy_path | default: '/apps/proxy/quick-order' | escape }}" {{ block.shopify_attributes }}>
   <h2>{{ block.settings.heading | escape }}</h2>
   {% if shop.metafields.gd_price_updator.subscription_active != 'true' %}
     <p>Wholesale ordering is currently unavailable.</p>
@@ -23,9 +23,12 @@
     <p>No wholesale collection is available yet.</p>
   {% else %}
     <p>{% if matched_group %}{{ matched_group.name | escape }}{% else %}Wholesale{% endif %} price list</p>
-    <label>Filter this page by product or SKU <input type="search" data-search></label>
+    <label>Search collection by product or SKU <input type="search" data-search></label>
+    <div class="gd-quick-order-actions"><label>Saved order list<select data-lists><option value="">Choose a list</option></select></label><button type="button" data-load-list>Load list</button><button type="button" data-delete-list>Delete list</button><label>List name<input type="text" maxlength="80" data-list-name></label><button type="button" data-save-list>Save selection</button></div>
+    <div class="gd-quick-order-actions"><button type="button" data-fetch-orders>Find recent paid orders</button><label>Previous order<select data-orders><option value="">Choose an order</option></select></label><button type="button" data-reorder>Load order quantities</button></div>
     <p>Displayed prices are estimates. Cart and checkout confirm discounts, minimum quantities and taxes.</p>
     {% paginate block.settings.collection.products by 20 %}
+      <span hidden data-catalog data-pages="{{ paginate.pages }}" data-page-param="{{ paginate.page_param }}" data-current-page="{{ paginate.current_page }}"></span>
       <div class="gd-quick-order-scroll">
         <table><thead><tr><th scope="col">Product / variant</th><th scope="col">SKU</th><th scope="col">Unit price</th><th scope="col">Availability</th><th scope="col">Quantity</th></tr></thead><tbody>
         {% for product in block.settings.collection.products %}
@@ -52,7 +55,7 @@
         {% endfor %}
         </tbody></table>
       </div>
-      {% if paginate.pages > 1 %}<nav aria-label="Wholesale products pages">{{ paginate | default_pagination }}</nav>{% endif %}
+      <nav data-pagination aria-label="Wholesale variant pages"><button type="button" data-previous>Previous</button> <span data-page-label></span> <button type="button" data-next>Next</button></nav>
     {% endpaginate %}
     <p data-empty hidden>No products match this filter.</p>
     <div class="gd-quick-order-actions"><strong data-total>0 units selected</strong><button type="button" data-add>Add selected to cart</button><a href="{{ routes.cart_url }}">View cart</a></div>
@@ -60,5 +63,5 @@
   {% endif %}
 </gd-quick-order>
 {% schema %}
-{"name":"Wholesale Quick Order","target":"section","stylesheet":"b2b-quick-order.css","javascript":"b2b-quick-order.js","settings":[{"type":"text","id":"heading","label":"Heading","default":"Wholesale quick order"},{"type":"collection","id":"collection","label":"Wholesale collection"}]}
+{"name":"Wholesale Quick Order","target":"section","stylesheet":"b2b-quick-order.css","javascript":"b2b-quick-order.js","settings":[{"type":"text","id":"heading","label":"Heading","default":"Wholesale quick order"},{"type":"collection","id":"collection","label":"Wholesale collection"},{"type":"text","id":"proxy_path","label":"Saved-list app proxy path","default":"/apps/proxy/quick-order","info":"Change only if the store has customised the app proxy URL."}]}
 {% endschema %}

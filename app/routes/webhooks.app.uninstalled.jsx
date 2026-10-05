@@ -11,6 +11,8 @@ export const action = async ({ request }) => {
   if (session) {
     await db.session.deleteMany({ where: { shop } });
   }
+  await db.savedOrderList.deleteMany({ where: { shop } });
+  await db.pricingAudit.deleteMany({ where: { shop } });
 
   return new Response();
 };

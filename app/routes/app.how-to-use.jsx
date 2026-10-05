@@ -23,10 +23,15 @@ export default function HowToUse() {
 
                 <s-section heading="Wholesale quick-order page">
                     <p className="panel-copy">Create a Wholesale Order page in Online Store, then open its page template in the Theme Editor. Add the Wholesale Quick Order app block, select a collection, and save. Assign that template to your page and add the page to your store navigation. Modern themes do not require manual code edits; older themes may need app-block support.</p>
-                    <p className="panel-copy">Buyers must sign in with an approved wholesale account. They can filter products or SKUs on the displayed page, enter quantities across variants, and add the selection to their cart. The selected collection shows 20 products per page; add each page&apos;s selection before moving to another page. Minimum quantities are shown beside prices.</p>
+                    <p className="panel-copy">Buyers must sign in with an approved wholesale account. Search loads the other pages of the selected collection, and entered quantities stay selected while paging or filtering. Large collections may take time to load and remain subject to Shopify Liquid pagination and variant limits. Minimum quantities are shown beside prices.</p>
+                    <p className="panel-copy">Buyers can save up to 20 named order lists with up to 100 variants each. Lists belong to the signed-in customer and work across devices. Loading a list replaces the current selection after confirmation, skips unavailable variants, and raises quantities to current minimums for review. Recent paid orders can also be loaded for reordering; normal order access covers the last 60 days, and orders over 100 lines are not supported.</p>
                     <p className="panel-copy">Prices are estimates until cart and checkout apply the active discount rules. Fixed wholesale price estimates are shown in the store&apos;s base currency; other currencies show retail estimates pending checkout conversion. Keep the GD: Wholesale Pro app embed enabled for the existing storefront pricing and cart controls, and verify that the wholesale discount function is active before launch.</p>
                 </s-section>
                 <s-box paddingBlockStart="large" />
+                <s-section heading="Pricing change history">
+                    <s-link href="/app/saved-order-lists">Customer saved-list data export</s-link>
+                    <p className="panel-copy">Open Pricing History to review manual variant-price, group-price and minimum-quantity edits, plus price imports recorded after this release. Each entry includes an actor, timestamp, previous value, requested value and outcome. Applied means Shopify confirmed success; pending or unknown records require verification. Import outcomes refresh when you open history, including when the import screen was closed. External Shopify edits and automated plan-limit cleanup are not recorded. Restoring old prices is not included in this release.</p>
+                </s-section>
                 <div className="help-layout">
                     <s-section heading="Recommended setup path">
                         <div className="help-steps">

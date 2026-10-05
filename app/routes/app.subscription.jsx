@@ -1,6 +1,7 @@
 import { getAppBillingResponse, getPricingPlansUrl } from "../utils/app-pricing.server";
 import { useState } from "react";
-import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useActionData, useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   Text,
   Button,
@@ -10,6 +11,12 @@ import {
   Modal,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => boundary.headers(headersArgs);
 
 const PLAN_FEATURES = [
   {

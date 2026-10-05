@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 
-export const loader = async ({ request }) => {
+export const loader = async () => {
     return new Response("Webhook endpoint is active", { status: 200 });
 };
 
@@ -19,18 +20,18 @@ export const action = async ({ request }) => {
         switch (topic) {
 
             case "CUSTOMERS_DATA_REQUEST":
-                //Logic for requesting customers data goes here...
-                console.log(`📌 No customer data stored. Responding to data request for shop: ${shop}`);
+                console.log(`Customer data request received for ${shop}; review saved-order-list export in the admin app.`);
                 break;
 
             case "CUSTOMERS_REDACT":
-                //Logic for removing customer data goes here...
-                console.log(`📌 No customer data stored. Ignoring redaction request for shop: ${shop}`);
+                if (payload.customer?.id) await db.savedOrderList.deleteMany({ where: { shop, customerId: String(payload.customer.id) } });
+                console.log(`Saved order lists redacted for ${shop}.`);
                 break;
 
             case "SHOP_REDACT":
-                //Logic for removing shop data goes here...
-                console.log(`📌 No shop data stored. Acknowledging shop deletion request for shop: ${shop}`);
+                await db.savedOrderList.deleteMany({ where: { shop } });
+                await db.pricingAudit.deleteMany({ where: { shop } });
+                console.log(`Saved lists and pricing history redacted for ${shop}.`);
                 break;
 
             default:

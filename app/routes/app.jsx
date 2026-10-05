@@ -1,5 +1,5 @@
 import { getAppBillingResponse, getPricingPlansUrl } from "../utils/app-pricing.server";
-import { Outlet, useLoaderData, useRouteError, Link, useLocation, useNavigate, useNavigation } from "react-router";
+import { Outlet, useLoaderData, useRouteError, Link, useLocation, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { NavMenu } from "@shopify/app-bridge-react";
@@ -8,7 +8,6 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import appStyles from "../styles/app.css?url";
 import translations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
-import { useEffect } from "react";
 import { enforceSubscriptionLimits } from "../utils/subscription-sync.server";
 
 export const links = () => [
@@ -17,7 +16,7 @@ export const links = () => [
 ];
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
 
   let hasActiveSubscription = false;
   let developmentPreview = false;
@@ -87,13 +86,16 @@ export const loader = async ({ request }) => {
     throw new Response("Unable to verify your plan. Please try again shortly.", { status: 503 });
   }
 
+  const pricingPlansUrl = getPricingPlansUrl(session.shop);
+  // Redirect while this request still has verified Shopify authentication.
+  // A client-side jump to /app/subscription can drop its embedded URL context.
+  if (!hasActiveSubscription) return redirect(pricingPlansUrl, { target: "_top" });
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", hasActiveSubscription, developmentPreview, pricingPlansUrl: getPricingPlansUrl(session.shop) };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", hasActiveSubscription, developmentPreview, pricingPlansUrl };
 };
 
 export default function App() {
   const { apiKey, hasActiveSubscription, developmentPreview, pricingPlansUrl } = useLoaderData();
-  const navigate = useNavigate();
   const location = useLocation();
   const navigation = useNavigation();
 
@@ -102,12 +104,6 @@ export default function App() {
   const isNavigatingWithinForms = 
     (location.pathname.startsWith("/app/forms") && navigation.location?.pathname?.startsWith("/app/forms"));
   const isLoading = navigation.state === "loading" && navigation.location?.pathname !== location.pathname && !isNavigatingWithinForms;
-
-  useEffect(() => {
-    if (!hasActiveSubscription && location.pathname !== "/app/subscription") {
-      navigate("/app/subscription");
-    }
-  }, [hasActiveSubscription, location.pathname, navigate]);
 
   const isOnSubscriptionPage = location.pathname === "/app/subscription";
   const showContent = hasActiveSubscription || isOnSubscriptionPage;
@@ -122,6 +118,7 @@ export default function App() {
         <s-link href="/app/forms">Wholesale Applications</s-link>
         <s-link href="/app/groups">Wholesale Groups</s-link>
         <s-link href="/app/b2b-pricing">Wholesale Pricing</s-link>
+        <s-link href="/app/pricing-history">Pricing History</s-link>
         {developmentPreview
           ? <s-link href="/app/subscription">Development preview</s-link>
           : <s-link href={pricingPlansUrl} target="_top">Subscription</s-link>}

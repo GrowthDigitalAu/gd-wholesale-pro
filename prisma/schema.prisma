@@ -68,3 +68,34 @@ model WholesaleGroup {
 
   @@unique([shop, customerTag])
 }
+
+model SavedOrderList {
+  id         String   @id @default(cuid())
+  shop       String
+  customerId String
+  name       String
+  items      Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([shop, customerId, name])
+  @@index([shop, customerId])
+}
+
+model PricingAudit {
+  id          String   @id @default(cuid())
+  shop        String
+  actor       String
+  source      String
+  variantId   String
+  field       String
+  beforeValue String?
+  afterValue  String?
+  status      String   @default("PENDING")
+  operationId String?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([shop, createdAt])
+  @@index([shop, operationId, status])
+}

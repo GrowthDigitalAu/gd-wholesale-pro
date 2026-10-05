@@ -9,6 +9,8 @@ import { Pagination, ProgressBar } from "@shopify/polaris";
 import { getVariantLimitForPlan } from "../utils/subscription";
 import { selectTransferGroup, scopedImportFields } from "../utils/group-price-transfer";
 import { downloadPriceTemplate } from "../utils/price-template.client";
+import { auditActor, reconcileImportHistory } from "../utils/pricing-history.server";
+import { randomUUID } from "node:crypto";
 
 const IMPORT_FIELDS = [
     {
@@ -126,13 +128,16 @@ export const loader = async ({ request }) => {
                     const fileResponse = await fetch(bulkOperation.url);
                     const text = await fileResponse.text();
                     const lines = text.split("\n").filter(line => line.trim() !== "");
+                    const auditResults = [];
                     lines.forEach(line => {
                         const result = JSON.parse(line);
-                        const userErrors = result.productVariantsBulkUpdate?.userErrors || [];
+                        auditResults.push(result);
+                        const userErrors = (result.data?.productVariantsBulkUpdate || result.productVariantsBulkUpdate)?.userErrors || [];
                         if (userErrors.length > 0) {
                              bulkErrors.push(userErrors[0].message);
                         }
                     });
+                    await reconcileImportHistory(db, session.shop, operationId, auditResults, 'COMPLETED');
                 } catch (error) {
                     console.error("Failed to read bulk operation results:", error);
                 }
@@ -143,6 +148,7 @@ export const loader = async ({ request }) => {
         } else if (bulkOperation.status === "RUNNING" || bulkOperation.status === "CREATED") {
              return { success: true, status: "RUNNING", progress: bulkOperation.objectCount, operationId };
         } else {
+             await reconcileImportHistory(db, session.shop, operationId, [], bulkOperation.status);
              return { success: false, status: bulkOperation.status, operationId };
         }
     }
@@ -629,7 +635,8 @@ export const action = async ({ request }) => {
 
             bulkUpdates.push({
                 productId: variantData.productId,
-                variantInput: variantInput
+                variantInput: variantInput,
+                auditBefore: variantData
             });
 
         } catch (error) {
@@ -658,6 +665,25 @@ export const action = async ({ request }) => {
             productId: productId,
             variants: variants
         }));
+    }
+
+    const auditRows = [];
+    for (const update of bulkUpdates) {
+        const before = update.auditBefore;
+        const changes = [
+            ['price', before.price, update.variantInput.price],
+            ['compareAtPrice', before.compareAtPrice, update.variantInput.compareAtPrice],
+        ];
+        for (const field of update.variantInput.metafields || []) {
+            const key = field.key || (field.id === before.b2bMetafieldId ? 'gd_b2b_price' : field.id === before.groupPriceMetafieldId ? 'gd_b2b_group_prices' : field.id === before.minQtyMetafieldId ? 'gd_b2b_min_qty' : null);
+            if (!key) continue;
+            const previous = key === 'gd_b2b_price' ? before.b2bPrice : key === 'gd_b2b_min_qty' ? before.minQty : JSON.stringify(before.groupPrices || {});
+            changes.push([key, previous, field.value]);
+        }
+        for (const [field, previous, next] of changes) {
+            if (next === undefined || String(previous) === String(next)) continue;
+            auditRows.push({ shop: session.shop, actor: auditActor(session), source: 'IMPORT', variantId: update.variantInput.id, field, beforeValue: previous === null ? null : String(previous), afterValue: next === null ? null : String(next), status: 'PENDING' });
+        }
     }
 
     const { stagedUploadsCreate, userErrors: stageErrors } = await (await admin.graphql(`#graphql
@@ -698,7 +724,10 @@ export const action = async ({ request }) => {
              return { success: true, results };
         }
 
-        const bulkRes = await admin.graphql(`#graphql
+        const pendingAuditId = `pending:${randomUUID()}`;
+        if (auditRows.length) await db.pricingAudit.createMany({ data: auditRows.map(row => ({ ...row, operationId: pendingAuditId })) });
+        let bulkRes;
+        try { bulkRes = await admin.graphql(`#graphql
         mutation bulkOperationRunMutation($mutation: String!, $stagedUploadPath: String!) {
             bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) {
                 bulkOperation { id }
@@ -714,20 +743,26 @@ export const action = async ({ request }) => {
                 }`,
                 stagedUploadPath: uploadPath
             }
-        });
+        }); } catch (error) {
+            await db.pricingAudit.updateMany({ where: { shop: session.shop, operationId: pendingAuditId }, data: { status: 'UNKNOWN', error: 'Import submission interrupted; verify Shopify bulk operations.' } });
+            throw error;
+        }
         
         const bulkData = await bulkRes.json();
         if (bulkData.data?.bulkOperationRunMutation?.userErrors?.length > 0) {
+             await db.pricingAudit.updateMany({ where: { shop: session.shop, operationId: pendingAuditId }, data: { status: 'FAILED', error: 'Shopify rejected the bulk operation.' } });
              results.errors.push("Bulk Mutation Error: " + bulkData.data.bulkOperationRunMutation.userErrors[0].message);
         } else {
              const opId = bulkData.data?.bulkOperationRunMutation?.bulkOperation?.id;
              console.log("Bulk Op Started:", opId, "Upload Key:", uploadPath);
              
              if (opId) {
+                 await db.pricingAudit.updateMany({ where: { shop: session.shop, operationId: pendingAuditId }, data: { operationId: opId } });
                  results.bulkOperationId = opId;
                  // Store how many variants we queued for update
                  results.expectedUpdateCount = bulkUpdates.length;
              } else {
+                 await db.pricingAudit.updateMany({ where: { shop: session.shop, operationId: pendingAuditId }, data: { status: 'UNKNOWN', error: 'No bulk operation ID returned.' } });
                  results.errors.push("Failed to trigger backend bulk operation (No ID returned)");
              }
         }
