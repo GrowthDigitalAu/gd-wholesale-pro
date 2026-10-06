@@ -4,11 +4,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getPricingPlansUrl } from './app-pricing.server.js';
 
-test('live-store plan gating uses authenticated top-level redirect, not a contextless client navigation', () => {
+test('live-store plan gating renders an in-app selection screen without automatic navigation', () => {
   const source = readFileSync(new URL('../routes/app.jsx', import.meta.url), 'utf8');
-  assert.match(source, /admin, session, redirect.*authenticate\.admin\(request\)/);
-  assert.match(source, /if \(!hasActiveSubscription\) return redirect\(pricingPlansUrl, \{ target: "_top" \}\)/);
+  assert.match(source, /admin, session.*authenticate\.admin\(request\)/);
+  assert.match(source, /hasActiveSubscription \? <Outlet \/> : <PlanSelection \/>/);
+  assert.doesNotMatch(source, /return redirect\(pricingPlansUrl/);
   assert.doesNotMatch(source, /navigate\("\/app\/subscription"\)/);
+});
+
+test('plan selection uses an explicit top-level button and supports refreshing billing status', () => {
+  const source = readFileSync(new URL('../components/plan-selection.jsx', import.meta.url), 'utf8');
+  assert.match(source, /href=\{pricingPlansUrl\} target="_top">Select your plan/);
+  assert.match(source, /revalidator\.revalidate\(\)/);
+  const subscription = readFileSync(new URL('../routes/app.subscription.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(subscription, /return redirect\(manageUrl/);
 });
 
 test('subscription route preserves Shopify authentication error boundaries and headers', () => {

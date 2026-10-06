@@ -9,6 +9,7 @@ import appStyles from "../styles/app.css?url";
 import translations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
 import { enforceSubscriptionLimits } from "../utils/subscription-sync.server";
+import PlanSelection from "../components/plan-selection";
 
 export const links = () => [
   { rel: "stylesheet", href: polarisStyles },
@@ -16,7 +17,7 @@ export const links = () => [
 ];
 
 export const loader = async ({ request }) => {
-  const { admin, session, redirect } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   let hasActiveSubscription = false;
   let developmentPreview = false;
@@ -87,9 +88,6 @@ export const loader = async ({ request }) => {
   }
 
   const pricingPlansUrl = getPricingPlansUrl(session.shop);
-  // Redirect while this request still has verified Shopify authentication.
-  // A client-side jump to /app/subscription can drop its embedded URL context.
-  if (!hasActiveSubscription) return redirect(pricingPlansUrl, { target: "_top" });
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "", hasActiveSubscription, developmentPreview, pricingPlansUrl };
 };
@@ -104,9 +102,6 @@ export default function App() {
   const isNavigatingWithinForms = 
     (location.pathname.startsWith("/app/forms") && navigation.location?.pathname?.startsWith("/app/forms"));
   const isLoading = navigation.state === "loading" && navigation.location?.pathname !== location.pathname && !isNavigatingWithinForms;
-
-  const isOnSubscriptionPage = location.pathname === "/app/subscription";
-  const showContent = hasActiveSubscription || isOnSubscriptionPage;
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -125,7 +120,7 @@ export default function App() {
         <s-link href="/app/how-to-use">Setup Guide</s-link>
       </NavMenu>
       <PolarisAppProvider i18n={translations} linkComponent={LinkAdapter}>
-        {showContent ? <Outlet /> : null}
+        {hasActiveSubscription ? <Outlet /> : <PlanSelection />}
       </PolarisAppProvider>
     </AppProvider>
   );

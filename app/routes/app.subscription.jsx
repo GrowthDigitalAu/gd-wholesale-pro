@@ -11,6 +11,7 @@ import {
   Modal,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import PlanSelection from "../components/plan-selection";
 
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
@@ -61,9 +62,6 @@ export const loader = async ({ request }) => {
   const manageUrl = getPricingPlansUrl(session.shop);
   if (new URL(request.url).searchParams.has("plan_handle") && activeSubscriptions.length > 0) {
     return redirect("/app");
-  }
-  if (activeSubscriptions[0]?.source !== "development") {
-    return redirect(manageUrl, { target: "_top" });
   }
 
   return {
@@ -171,6 +169,8 @@ export default function SubscriptionPage() {
       { method: "POST" }
     );
   };
+
+  if (!subscription) return <PlanSelection />;
 
   return (
     <s-page heading="Subscription">
